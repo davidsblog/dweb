@@ -15,7 +15,7 @@
 void write_html(int socket_fd, char *head, char *html)
 {
 	char headbuf[255];
-	sprintf(headbuf, "%s\nContent-Length: %d\r\n\r\n", head, (int)strlen(html)+1);
+	sprintf(headbuf, "%s\nContent-Length: %d\r\n\r\n", head, strlen(html)+1);
 	write(socket_fd, headbuf, strlen(headbuf));
 	write(socket_fd, html, strlen(html));
 	write(socket_fd, "\n", 1);
@@ -81,7 +81,7 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
 {
 	int j;
 	http_verb type;
-	long i, ret;
+	long i, len, ret;
 	static char buffer[BUFSIZE+1];	// static, filled with zeroes
 	char *body;
 
@@ -208,4 +208,53 @@ int dwebserver(int port, void (*responder_func)(char*, char*, int, http_verb))
 			}
 		}
 	}
+}
+
+// The same algorithm as found here:
+// http://spskhokhar.blogspot.co.uk/2012/09/url-decode-http-query-string.html
+void url_decode(char *s)
+{
+    int i, len = strlen(s);
+    char s_copy[len+1];
+    char *ptr = s_copy;
+    memset(s_copy, 0, sizeof(s_copy));
+
+    for (i=0; i < len; i++)
+    {
+        if ( (s[i] != '%') || (!isdigit(s[i+1]) || !isdigit(s[i+2])) )
+        {
+            *ptr++ = s[i];
+        }
+		else
+		{
+			*ptr++ = ((s[i+1] - '0') << 4) | (s[i+2] - '0');
+			i += 2;
+		}
+    }
+    *ptr = 0;
+    strcpy(s, s_copy);
+}
+
+int get_form_values(char *body, char *names[], char *values[], int max_values)
+{
+	int t=0, i;
+	char *token = strtok(body, "&");
+	
+    while(token != NULL && t < max_values)
+    {
+        names[t] = token;
+		for (i=0; i<strlen(token); i++)
+		{
+			if (token[i]=='=')
+			{
+				token[i] = 0;
+				values[t] = token+i+1;
+				break;
+			}
+		}
+		url_decode(names[t]);
+		url_decode(values[t++]);
+		token = strtok(NULL, "&");
+    }
+	return t;
 }

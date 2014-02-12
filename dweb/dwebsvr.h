@@ -20,5 +20,7 @@ void ok_200(int socket_fd, char *html, char *path);
 void logger(int type, char *s1, char *s2, int socket_fd);
 void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, http_verb));
 int dwebserver(int port, void (*responder_func)(char*, char*, int, http_verb));
-	
+int get_form_values(char *body, char *names[], char *values[], int max_values);
+void url_decode(char *s);
+
 #endif

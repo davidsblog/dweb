@@ -2,10 +2,10 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <string.h>
-#include <unistd.h>
-#include <sys/types.h>
 
 #include "dwebsvr.h"
+
+#define MAX_FORM_VALUES 10
 
 struct {
 	char *ext;
@@ -23,8 +23,6 @@ struct {
 	{"html","text/html" },  
 	{"js","text/javascript" },  
 	{0,0} };
-	
-char default_file[] = "index.html";
 
 void send_file_response(char*, char*, int, http_verb);
 void test_response(char*, char*, int, http_verb);
@@ -43,27 +41,36 @@ int main(int argc, char **argv)
 void test_response(char *request, char *body, int socketfd, http_verb type)
 {
 	ok_200(socketfd,
-		"<html><head>\n<title>Test Page</title>\n"
-		"</head><body>\n<h1>Testing...</h1>\nThis is a test response.\n</body>"
+		"<html><head><title>Test Page</title></head>"
+		"<body><h1>Testing...</h1>This is a test response.</body>"
 		"</html>", request);
 }
 
 void send_file_response(char *request, char *body, int socketfd, http_verb type)
 {
-	int file_id, path_length, i;
+	int file_id, path_length, i = 0, post_values = 0;
 	long len;
 	char *content_type = NULL, response[BUFSIZE+1];
+	char *form_names[MAX_FORM_VALUES], *form_values[MAX_FORM_VALUES];
 	
-	path_length=(int)strlen(request);
+	path_length=strlen(request);
 	if (path_length==0)
 	{
-		return send_file_response(default_file, body, socketfd, type);
+		return send_file_response("index.html", body, socketfd, type);
 	}
 	
-	printf("DEBUG path_length: %d\n", path_length);
-	printf("DEBUG request: %s\n", request);
-	printf("DEBUG body: %s\n", body);
+	i = get_form_values(body, form_names, form_values, MAX_FORM_VALUES);
+	if (i == 2)
+	{
+		sprintf(response, "<html><head><title>Response Page</title></head>"
+			"<body><h1>Thanks...</h1>You entered:<br/>"
+			"%s is %s<br/>"
+			"%s is %s<br/>"
+			"</body></html>", form_names[0], form_values[0], form_names[1], form_values[1]);
 		
+		return ok_200(socketfd, response, request);
+	}
+	
 	// work out the file type and check we support it
 	for (i=0; extensions[i].ext != 0; i++)
 	{
