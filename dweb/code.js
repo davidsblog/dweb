@@ -1,1 +1,1 @@
-alert("Hello");
+alert("OK. Javascript files are being served.");
