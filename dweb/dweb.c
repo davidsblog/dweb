@@ -50,12 +50,12 @@ void test_response(char *request, char *body, int socketfd, http_verb type)
 
 void send_file_response(char *request, char *body, int socketfd, http_verb type)
 {
-	int file_id, path_length, i = 0, post_values = 0;
+	int file_id, path_length, i = 0;
 	long len;
 	char *content_type = NULL, response[BUFSIZE+1];
 	char *form_names[MAX_FORM_VALUES], *form_values[MAX_FORM_VALUES];
 	
-	path_length=strlen(request);
+	path_length=(int)strlen(request);
 	if (path_length==0)
 	{
 		return send_file_response("index.html", body, socketfd, type);

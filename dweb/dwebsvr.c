@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
@@ -15,7 +16,7 @@
 void write_html(int socket_fd, char *head, char *html)
 {
 	char headbuf[255];
-	sprintf(headbuf, "%s\nContent-Length: %d\r\n\r\n", head, strlen(html)+1);
+	sprintf(headbuf, "%s\nContent-Length: %d\r\n\r\n", head, (int)strlen(html)+1);
 	write(socket_fd, headbuf, strlen(headbuf));
 	write(socket_fd, html, strlen(html));
 	write(socket_fd, "\n", 1);
@@ -81,7 +82,7 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
 {
 	int j;
 	http_verb type;
-	long i, len, ret;
+	long i, ret;
 	static char buffer[BUFSIZE+1];	// static, filled with zeroes
 	char *body;
 
@@ -214,7 +215,7 @@ int dwebserver(int port, void (*responder_func)(char*, char*, int, http_verb))
 // http://spskhokhar.blogspot.co.uk/2012/09/url-decode-http-query-string.html
 void url_decode(char *s)
 {
-    int i, len = strlen(s);
+    int i, len = (int)strlen(s);
     char s_copy[len+1];
     char *ptr = s_copy;
     memset(s_copy, 0, sizeof(s_copy));
