@@ -1,1 +1,3 @@
-alert("OK. Javascript files are being served.");
+$(function() {
+  $("#status").text("OK. Javascript and jQuery are working...");
+});
