@@ -32,6 +32,16 @@ which was my starting point.  But I am adding support for things like HTTP POST 
 serving up dynamic content.  Unlike nweb, this code does not run as a daemon.
 
 
+Building
+========
+
+To build the example program, which uses jQuery, allows HTML form values to be posted back, 
+and gives a dynamic response, just type ```make``` ... you can then run ```dweb``` from the 
+command line (you need to specify the port number as the first parameter).
+
+To build the trivial example (as shown above) you can type ```make simple``` and run 
+```simple``` from the command line.
+
 License
 =======
 
