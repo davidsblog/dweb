@@ -167,6 +167,8 @@ int dwebserver(int port, void (*responder_func)(char*, char*, int, http_verb))
 		exit(3);
 	}
 	
+	signal(SIGCLD, SIG_IGN); /* ignore child death */
+	signal(SIGHUP, SIG_IGN); /* ignore terminal hangups */
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 	serv_addr.sin_port = htons(port);
