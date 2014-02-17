@@ -23,10 +23,11 @@ struct {
 	{"tar", "image/tar" },  
 	{"htm", "text/html" },  
 	{"html","text/html" },  
-	{"js","text/javascript" },  
+	{"js","text/javascript" },
 	{0,0} };
 
 void send_file_response(char*, char*, int, http_verb);
+void send_api_response(char *request, char *body, int socketfd, http_verb type);
 
 int main(int argc, char **argv)
 {
@@ -37,6 +38,25 @@ int main(int argc, char **argv)
 	}
     logger(LOG, "dweb server starting\nPress CTRL+C to quit", "", 0);
 	dwebserver(atoi(argv[1]), &send_file_response);
+}
+
+void send_api_response(char *request, char *body, int socketfd, http_verb type)
+{
+	char *form_names[1], *form_values[1];
+	char response[4];
+	int i = get_form_values(body, form_names, form_values, 1);
+	
+	if (i==1 && !strncmp(form_names[0],"counter", strlen(form_names[0])))
+	{
+		int c = atoi(form_values[0]);
+		if (c>999) c=0;
+		sprintf(response, "%d", ++c);
+		return ok_200(socketfd, response, request);
+	}
+	else
+	{
+		return forbidden_403(socketfd, "Bad request");
+	}
 }
 
 void send_file_response(char *request, char *body, int socketfd, http_verb type)
@@ -50,6 +70,11 @@ void send_file_response(char *request, char *body, int socketfd, http_verb type)
 	if (path_length==0)
 	{
 		return send_file_response("index.html", body, socketfd, type);
+	}
+	
+	if (!strncmp(&request[path_length-3], "api", 3))
+	{
+		return send_api_response(request, body, socketfd, type);
 	}
 	
 	i = get_form_values(body, form_names, form_values, MAX_FORM_VALUES);
