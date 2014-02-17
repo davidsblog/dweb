@@ -35,6 +35,7 @@ int main(int argc, char **argv)
 		printf("hint: dweb [port number]\n");
 		exit(0);
 	}
+    logger(LOG, "dweb server starting\nPress CTRL+C to quit", "", 0);
 	dwebserver(atoi(argv[1]), &send_file_response);
 }
 

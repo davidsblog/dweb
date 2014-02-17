@@ -159,16 +159,19 @@ int dwebserver(int port, void (*responder_func)(char*, char*, int, http_verb))
 		exit(3);
 	}
 	
-	logger(LOG, "dweb server starting\nPress CTRL+C to quit", "", 0);
-	
 	if ((listenfd = socket(AF_INET, SOCK_STREAM,0)) < 0)
 	{
 		logger(ERROR, "system call", "socket", 0);
 		exit(3);
 	}
-	
-	signal(SIGCLD, SIG_IGN); /* ignore child death */
-	signal(SIGHUP, SIG_IGN); /* ignore terminal hangups */
+
+     // ignore child death and terminal hangups
+#ifndef SIGCLD
+	signal(SIGCHLD, SIG_IGN);
+#else
+	signal(SIGCLD, SIG_IGN);
+#endif
+    signal(SIGHUP, SIG_IGN);
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 	serv_addr.sin_port = htons(port);
@@ -224,7 +227,11 @@ void url_decode(char *s)
 
     for (i=0; i < len; i++)
     {
-        if ( (s[i] != '%') || (!isdigit(s[i+1]) || !isdigit(s[i+2])) )
+        if (s[i]=='+')
+        {
+            *ptr++ = ' ';
+        }
+        else if ( (s[i] != '%') || (!isdigit(s[i+1]) || !isdigit(s[i+2])) )
         {
             *ptr++ = s[i];
         }
