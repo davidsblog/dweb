@@ -26,8 +26,9 @@ struct {
 	{"js","text/javascript" },
 	{0,0} };
 
-void send_file_response(char*, char*, int, http_verb);
-void send_api_response(char *request, char *body, int socketfd, http_verb type);
+void send_response(char*, char*, int, http_verb);
+void send_api_response(char*, char*, int);
+void send_file_response(char*, char*, int, int);
 
 int main(int argc, char **argv)
 {
@@ -37,21 +38,37 @@ int main(int argc, char **argv)
 		exit(0);
 	}
     logger(LOG, "dweb server starting\nPress CTRL+C to quit", "", 0);
-	dwebserver(atoi(argv[1]), &send_file_response);
+	dwebserver(atoi(argv[1]), &send_response);
 }
 
-void send_api_response(char *request, char *body, int socketfd, http_verb type)
+// decide if we need to send an API response or a file...
+void send_response(char *path, char *request_body, int socketfd, http_verb type)
+{
+    int path_length=(int)strlen(path);
+    if (!strncmp(&path[path_length-3], "api", 3))
+	{
+		return send_api_response(path, request_body, socketfd);
+	}
+    if (path_length==0)
+	{
+        return send_file_response("index.html", request_body, socketfd, 10);
+	}
+    send_file_response(path, request_body, socketfd, path_length);
+}
+
+// a simple API, it receives a number, increments it and returns the response
+void send_api_response(char *path, char *request_body, int socketfd)
 {
 	char *form_names[1], *form_values[1];
 	char response[4];
-	int i = get_form_values(body, form_names, form_values, 1);
+	int i = get_form_values(request_body, form_names, form_values, 1);
 	
 	if (i==1 && !strncmp(form_names[0],"counter", strlen(form_names[0])))
 	{
 		int c = atoi(form_values[0]);
 		if (c>999) c=0;
 		sprintf(response, "%d", ++c);
-		return ok_200(socketfd, response, request);
+		return ok_200(socketfd, response, path);
 	}
 	else
 	{
@@ -59,25 +76,14 @@ void send_api_response(char *request, char *body, int socketfd, http_verb type)
 	}
 }
 
-void send_file_response(char *request, char *body, int socketfd, http_verb type)
+void send_file_response(char *path, char *request_body, int socketfd, int path_length)
 {
-	int file_id, path_length, i = 0;
+	int file_id, i;
 	long len;
 	char *content_type = NULL, response[BUFSIZE+1];
 	char *form_names[MAX_FORM_VALUES], *form_values[MAX_FORM_VALUES];
 	
-	path_length=(int)strlen(request);
-	if (path_length==0)
-	{
-		return send_file_response("index.html", body, socketfd, type);
-	}
-	
-	if (!strncmp(&request[path_length-3], "api", 3))
-	{
-		return send_api_response(request, body, socketfd, type);
-	}
-	
-	i = get_form_values(body, form_names, form_values, MAX_FORM_VALUES);
+	i = get_form_values(request_body, form_names, form_values, MAX_FORM_VALUES);
 	if (i == 2)
 	{
 		sprintf(response, "<html><head><title>Response Page</title></head>"
@@ -86,14 +92,14 @@ void send_file_response(char *request, char *body, int socketfd, http_verb type)
 			"%s is %s<br/>"
 			"</body></html>", form_names[0], form_values[0], form_names[1], form_values[1]);
 		
-		return ok_200(socketfd, response, request);
+		return ok_200(socketfd, response, path);
 	}
 	
 	// work out the file type and check we support it
 	for (i=0; extensions[i].ext != 0; i++)
 	{
 		len = strlen(extensions[i].ext);
-		if( !strncmp(&request[path_length-len], extensions[i].ext, len))
+		if( !strncmp(&path[path_length-len], extensions[i].ext, len))
 		{
 			content_type = extensions[i].filetype;
 			break;
@@ -105,7 +111,7 @@ void send_file_response(char *request, char *body, int socketfd, http_verb type)
 		exit(3);
 	}
 	
-	if (file_id = open(request, O_RDONLY), file_id == -1)
+	if (file_id = open(path, O_RDONLY), file_id == -1)
 	{
 		notfound_404(socketfd, "failed to open file");
 		exit(3);
@@ -114,7 +120,8 @@ void send_file_response(char *request, char *body, int socketfd, http_verb type)
 	// open the file for reading
 	len = (long)lseek(file_id, (off_t)0, SEEK_END); // lseek to the file end to find the length
 	lseek(file_id, (off_t)0, SEEK_SET); // lseek back to the file start ready for reading
-    sprintf(response, "HTTP/1.1 200 OK\nServer: dweb\nContent-Length: %ld\nConnection: close\nContent-Type: %s\r\n\r\n", len, content_type); // headers
+    sprintf(response, "HTTP/1.1 200 OK\nServer: dweb\nContent-Length: %ld\nConnection: close\n"
+            "Content-Type: %s\r\n\r\n", len, content_type); // headers
 	write(socketfd, response, strlen(response));
 
 	// send file in blocks (the last block could be smaller)
@@ -122,7 +129,7 @@ void send_file_response(char *request, char *body, int socketfd, http_verb type)
 	{
 		write(socketfd, response, len);
 	}
-	sleep(1);	// allow socket to drain before signalling the socket is closed
+    // allow socket to drain before signalling the socket is closed
+	sleep(1);
 	close(socketfd);
 }
-

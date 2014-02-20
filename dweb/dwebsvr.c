@@ -67,14 +67,12 @@ http_verb request_type(char *request)
 	{
 		return HTTP_GET;
 	}
-	else if (strncmp(request, "POST ", 4)==0 || strncmp(request, "post ", 4)==0)
+	if (strncmp(request, "POST ", 4)==0 || strncmp(request, "post ", 4)==0)
 	{
 		return HTTP_POST;
 	}
-	else
-	{
-		return HTTP_NOT_SUPPORTED;
-	}
+	
+	return HTTP_NOT_SUPPORTED;
 }
 
 // this is a child web server process, we can safely exit on errors
@@ -150,9 +148,10 @@ int dwebserver(int port, void (*responder_func)(char*, char*, int, http_verb))
 {
 	int pid, listenfd, socketfd, hit;
 	socklen_t length;
-	static struct sockaddr_in cli_addr; // static = initialised to zeros
-	static struct sockaddr_in serv_addr; // static = initialised to zeros
-
+    // static = initialised to zeros
+	static struct sockaddr_in cli_addr;
+	static struct sockaddr_in serv_addr;
+    
 	if (port <= 0 || port > 60000)
 	{
 		logger(ERROR, "Invalid port number (try 1 - 60000)", "", 0);
@@ -245,6 +244,7 @@ void url_decode(char *s)
     strcpy(s, s_copy);
 }
 
+// assumes a content type of "application/x-www-form-urlencoded" (the default type)
 int get_form_values(char *body, char *names[], char *values[], int max_values)
 {
 	int t=0, i;
