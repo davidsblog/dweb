@@ -66,7 +66,7 @@ void send_api_response(char *path, char *request_body, int socketfd)
 	if (i==1 && !strncmp(form_names[0],"counter", strlen(form_names[0])))
 	{
 		int c = atoi(form_values[0]);
-		if (c>999) c=0;
+		if (c>998) c=0;
 		sprintf(response, "%d", ++c);
 		return ok_200(socketfd, response, path);
 	}
