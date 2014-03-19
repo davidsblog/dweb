@@ -13,6 +13,8 @@
 
 #include "dwebsvr.h"
 
+void (*logger_function)(int, char*, char*, int);
+
 void write_html(int socket_fd, char *head, char *html)
 {
 	char headbuf[255];
@@ -28,7 +30,7 @@ void forbidden_403(int socket_fd, char *info)
 		"<html><head>\n<title>403 Forbidden</title>\n"
 		"</head><body>\n<h1>Forbidden</h1>\nThe requested URL, file type or operation is not allowed on this simple webserver.\n</body>"
 		"</html>");
-	logger(LOG, "403 FORBIDDEN", info, socket_fd);
+	logger_function(LOG, "403 FORBIDDEN", info, socket_fd);
 }
 
 void notfound_404(int socket_fd, char *info)
@@ -37,17 +39,17 @@ void notfound_404(int socket_fd, char *info)
 		"<html><head>\n<title>404 Not Found</title>\n"
 		"</head><body>\n<h1>Not Found</h1>\nThe requested URL was not found on this server.\n</body></html>");
 
-	logger(LOG, "404 NOT FOUND", info, socket_fd);
+	logger_function(LOG, "404 NOT FOUND", info, socket_fd);
 }
 
 void ok_200(int socket_fd, char *html, char *path)
 {
 	write_html(socket_fd, "HTTP/1.1 200 OK\nServer: dweb\nConnection: close\nContent-Type: text/html", html);
 	
-	logger(LOG, "200 OK", path, socket_fd);
+	logger_function(LOG, "200 OK", path, socket_fd);
 }
 
-void logger(int type, char *s1, char *s2, int socket_fd)
+void default_logger(int type, char *s1, char *s2, int socket_fd)
 {
 	switch (type)
 	{
@@ -107,7 +109,7 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
 			buffer[i]='*';
 		}
 	}
-	logger(LOG, "request", buffer, hit);
+	logger_function(LOG, "request", buffer, hit);
 	
 	if (type = request_type(buffer), type == HTTP_NOT_SUPPORTED)
 	{
@@ -144,7 +146,9 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
 	exit(1);
 }
 
-int dwebserver(int port, void (*responder_func)(char*, char*, int, http_verb))
+int dwebserver(int port,
+    void (*responder_func)(char*, char*, int, http_verb),
+    void (*logger_func)(int, char*, char*, int) )
 {
 	int pid, listenfd, socketfd, hit;
 	socklen_t length;
@@ -152,18 +156,27 @@ int dwebserver(int port, void (*responder_func)(char*, char*, int, http_verb))
 	static struct sockaddr_in cli_addr;
 	static struct sockaddr_in serv_addr;
     
+    if (logger_func != NULL)
+    {
+        logger_function = logger_func;
+    }
+    else
+    {
+        logger_function = &default_logger;
+    }
+    
 	if (port <= 0 || port > 60000)
 	{
-		logger(ERROR, "Invalid port number (try 1 - 60000)", "", 0);
+		logger_function(ERROR, "Invalid port number (try 1 - 60000)", "", 0);
 		exit(3);
 	}
 	
 	if ((listenfd = socket(AF_INET, SOCK_STREAM,0)) < 0)
 	{
-		logger(ERROR, "system call", "socket", 0);
+		logger_function(ERROR, "system call", "socket", 0);
 		exit(3);
 	}
-
+    
      // ignore child death and terminal hangups
 #ifndef SIGCLD
 	signal(SIGCHLD, SIG_IGN);
@@ -176,12 +189,12 @@ int dwebserver(int port, void (*responder_func)(char*, char*, int, http_verb))
 	serv_addr.sin_port = htons(port);
 	if (bind(listenfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) <0)
 	{
-		logger(ERROR, "system call", "bind", 0);
+		logger_function(ERROR, "system call", "bind", 0);
 		exit(3);
 	}
 	if (listen(listenfd, 64) <0)
 	{
-		logger(ERROR, "system call", "listen", 0);
+		logger_function(ERROR, "system call", "listen", 0);
 		exit(3);
 	}
 
@@ -190,12 +203,12 @@ int dwebserver(int port, void (*responder_func)(char*, char*, int, http_verb))
 		length = sizeof(cli_addr);
 		if ((socketfd = accept(listenfd, (struct sockaddr*)&cli_addr, &length)) < 0)
 		{
-			logger(ERROR, "system call", "accept", 0);
+			logger_function(ERROR, "system call", "accept", 0);
 			exit(3);
 		}
 		if ((pid = fork()) < 0)
 		{
-			logger(ERROR, "system call", "fork", 0);
+			logger_function(ERROR, "system call", "fork", 0);
 			exit(3);
 		}
 		else

@@ -4,6 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <errno.h>
 
 #include "dwebsvr.h"
 
@@ -27,6 +28,7 @@ struct {
 	{0,0} };
 
 void send_response(char*, char*, int, http_verb);
+void log_filter(int, char*, char*, int);
 void send_api_response(char*, char*, int);
 void send_file_response(char*, char*, int, int);
 
@@ -37,8 +39,14 @@ int main(int argc, char **argv)
 		printf("hint: dweb [port number]\n");
 		exit(0);
 	}
-    logger(LOG, "dweb server starting\nPress CTRL+C to quit", "", 0);
-	dwebserver(atoi(argv[1]), &send_response);
+    puts("dweb server starting\nPress CTRL+C to quit");
+	dwebserver(atoi(argv[1]), &send_response, &log_filter);
+}
+
+void log_filter(int type, char *s1, char *s2, int socket_fd)
+{
+    if (type!=ERROR) return;
+    printf("ERROR: %s: %s (errno=%d pid=%d socket=%d)\n",s1, s2, errno, getpid(), socket_fd);
 }
 
 // decide if we need to send an API response or a file...
@@ -63,7 +71,7 @@ void send_api_response(char *path, char *request_body, int socketfd)
 	char response[4];
 	int i = get_form_values(request_body, form_names, form_values, 1);
 	
-	if (i==1 && !strncmp(form_names[0],"counter", strlen(form_names[0])))
+	if (i==1 && !strncmp(form_names[0], "counter", strlen(form_names[0])))
 	{
 		int c = atoi(form_values[0]);
 		if (c>998) c=0;
