@@ -49,15 +49,15 @@ void ok_200(int socket_fd, char *html, char *path)
 	logger_function(LOG, "200 OK", path, socket_fd);
 }
 
-void default_logger(int type, char *s1, char *s2, int socket_fd)
+void default_logger(int type, char *title, char *description, int socket_fd)
 {
 	switch (type)
 	{
 		case ERROR:
-			printf("ERROR: %s: %s (errno=%d pid=%d socket=%d)\n",s1, s2, errno, getpid(), socket_fd);
+			printf("ERROR: %s: %s (errno=%d pid=%d socket=%d)\n",title, description, errno, getpid(), socket_fd);
 			break;
 		default:
-			printf("INFO: %s: %s (pid=%d socket=%d)\n",s1, s2, getpid(), socket_fd);
+			printf("INFO: %s: %s (pid=%d socket=%d)\n",title, description, getpid(), socket_fd);
 			break;
 	}
 	fflush(stdout);
@@ -171,12 +171,6 @@ int dwebserver(int port,
 		exit(3);
 	}
 	
-	if ((listenfd = socket(AF_INET, SOCK_STREAM,0)) < 0)
-	{
-		logger_function(ERROR, "system call", "socket", 0);
-		exit(3);
-	}
-    
      // ignore child death and terminal hangups
 #ifndef SIGCLD
 	signal(SIGCHLD, SIG_IGN);
@@ -184,14 +178,23 @@ int dwebserver(int port,
 	signal(SIGCLD, SIG_IGN);
 #endif
     signal(SIGHUP, SIG_IGN);
-	serv_addr.sin_family = AF_INET;
+	
+    if ((listenfd = socket(AF_INET, SOCK_STREAM,0)) < 0)
+	{
+		logger_function(ERROR, "system call", "socket", 0);
+		exit(3);
+	}
+    
+    serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 	serv_addr.sin_port = htons(port);
+    
 	if (bind(listenfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) <0)
 	{
 		logger_function(ERROR, "system call", "bind", 0);
 		exit(3);
 	}
+    
 	if (listen(listenfd, 64) <0)
 	{
 		logger_function(ERROR, "system call", "listen", 0);
