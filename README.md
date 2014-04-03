@@ -16,7 +16,7 @@ int main(int argc, char **argv)
 		printf("hint: dweb [port number]\n");
 		exit(0);
 	}
-	dwebserver(atoi(argv[1]), &test_response);
+	dwebserver(atoi(argv[1]), &test_response, NULL);
 }
 
 void test_response(char *path, char *body, int socketfd, http_verb type)
