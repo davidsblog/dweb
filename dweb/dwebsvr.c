@@ -44,7 +44,7 @@ void notfound_404(int socket_fd, char *info)
 
 void ok_200(int socket_fd, char *html, char *path)
 {
-	write_html(socket_fd, "HTTP/1.1 200 OK\nServer: dweb\nConnection: close\nContent-Type: text/html", html);
+	write_html(socket_fd, "HTTP/1.1 200 OK\nServer: dweb\nCache-Control: no-cache\nPragma: no-cache\nContent-Type: text/html", html);
 	
 	logger_function(LOG, "200 OK", path, socket_fd);
 }
@@ -61,6 +61,37 @@ void default_logger(int type, char *title, char *description, int socket_fd)
 			break;
 	}
 	fflush(stdout);
+}
+
+struct http_header get_header(const char *name, char *request)
+{
+    struct http_header retval;
+    int x=0;
+    char *ptr = strstr(request, name);
+    strncpy(retval.name, name, sizeof(retval.name)-1);
+    retval.name[sizeof(retval.name)-1] = 0;
+    
+    if (ptr == NULL)
+    {
+        retval.value[0]=0;
+        return retval;
+    }
+    
+    while (*ptr++!=':') ;
+    while (isblank(*++ptr)) ;
+    while (x<sizeof(retval.value)-1 && *ptr!='\r' && *ptr!='\n')
+        retval.value[x++] = *ptr++;
+    
+    retval.value[x]=0;
+    return retval;
+}
+
+long get_body_start(char *request)
+{
+    // return the starting index of the request body
+    // so ... just find the end of the HTTP headers
+    char *ptr = strstr(request, "\r\n\r\n");
+    return (ptr+4) - request;
 }
 
 http_verb request_type(char *request)
@@ -82,26 +113,43 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
 {
 	int j;
 	http_verb type;
-	long i, ret;
+	long i, body_size = 0, body_expected, request_size = 0;
 	static char buffer[BUFSIZE+1];	// static, filled with zeroes
 	char *body;
-
-	ret = read(socketfd, buffer, BUFSIZE); // read whole web request
-	if (ret == 0 || ret == -1)
+    struct http_header content_length;
+    
+    // we need to at least get the HTTP headers...
+    request_size = read(socketfd, buffer, BUFSIZE);
+    content_length = get_header("Content-Length", buffer);
+    body_expected = atoi(content_length.value);
+    body_size = request_size - get_body_start(buffer);
+    
+    // safari seems to send the headers, and then the body later
+    while (body_size < body_expected)
+    {
+        i = read(socketfd, buffer+request_size, BUFSIZE-request_size);
+        if (i>0) request_size+=i;
+        body_size = request_size - get_body_start(buffer);
+    }
+    
+    if (request_size == 0 || request_size == -1)
 	{
 		// cannot read request, so we'll stop
 		forbidden_403(socketfd, "failed to read http request");
 		exit(3);
 	}
-	if (ret > 0 && ret < BUFSIZE)
+    
+	if (request_size > 0 && request_size < BUFSIZE)
 	{
-		buffer[ret] = 0; // null terminate after chars
+		buffer[request_size] = 0; // null terminate after chars
 	}
 	else
 	{
 		buffer[0] = 0;
 	}
-	for (i=0; i<ret; i++)
+    logger_function(LOG, "request", buffer, hit);
+    
+	for (i=0; i<request_size; i++)
 	{
 		// replace CF and LF with asterisks
 		if(buffer[i] == '\r' || buffer[i] == '\n')
@@ -109,7 +157,6 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
 			buffer[i]='*';
 		}
 	}
-	logger_function(LOG, "request", buffer, hit);
 	
 	if (type = request_type(buffer), type == HTTP_NOT_SUPPORTED)
 	{
@@ -147,8 +194,8 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
 }
 
 int dwebserver(int port,
-    void (*responder_func)(char*, char*, int, http_verb),
-    void (*logger_func)(int, char*, char*, int) )
+    void (*responder_func)(char*, char*, int, http_verb),  // pointer to responder function
+    void (*logger_func)(int, char*, char*, int) )          // pointer to logger (or NULL)
 {
 	int pid, listenfd, socketfd, hit;
 	socklen_t length;
@@ -217,7 +264,7 @@ int dwebserver(int port,
 		else
 		{
 			if (pid == 0) 
-			{ 	
+			{
 				// child
 				close(listenfd);
 				webhit(socketfd, hit, responder_func); // never returns
@@ -225,7 +272,7 @@ int dwebserver(int port,
 			else
 			{
 				// parent
-				close(socketfd);
+                close(socketfd);
 			}
 		}
 	}

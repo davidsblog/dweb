@@ -2,7 +2,7 @@
 
 #define _DWEBSVR_H
 
-#define BUFSIZE  8096
+#define BUFSIZE  8192
 
 #define ERROR    42
 #define LOG      43
@@ -13,8 +13,17 @@
 
 #define http_verb int
 
-int dwebserver(int port, void (*responder_func)(char*, char*, int, http_verb),
+struct http_header
+{
+    char name[50];
+    char value[255];
+};
+
+int dwebserver(int port,
+    void (*responder_func)(char*, char*, int, http_verb),
     void (*logger_func)(int, char*, char*, int));
+
+struct http_header get_header(const char *name, char *request);
 
 void write_html(int socket_fd, char *head, char *html);
 void forbidden_403(int socket_fd, char *info);

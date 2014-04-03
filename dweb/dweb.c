@@ -34,7 +34,7 @@ void send_file_response(char*, char*, int, int);
 
 int main(int argc, char **argv)
 {
-	if (argc != 2 || !strcmp(argv[1], "-?"))
+    if (argc != 2 || !strcmp(argv[1], "-?"))
 	{
 		printf("hint: dweb [port number]\n");
 		exit(0);
