@@ -115,14 +115,12 @@ void send_file_response(char *path, char *request_body, int socketfd, int path_l
 	}
 	if (content_type==NULL)
 	{
-		forbidden_403(socketfd, "file extension type not supported");
-		exit(3);
+		return forbidden_403(socketfd, "file extension type not supported");
 	}
 	
 	if (file_id = open(path, O_RDONLY), file_id == -1)
 	{
-		notfound_404(socketfd, "failed to open file");
-		exit(3);
+		return notfound_404(socketfd, "failed to open file");
 	}
 	
 	// open the file for reading
@@ -139,5 +137,4 @@ void send_file_response(char *path, char *request_body, int socketfd, int path_l
 	}
     // allow socket to drain before signalling the socket is closed
 	sleep(1);
-	close(socketfd);
 }

@@ -15,6 +15,12 @@
 
 void (*logger_function)(int, char*, char*, int);
 
+void abort_hit(int socket_fd, int exit_code)
+{
+    close(socket_fd);
+    exit(exit_code);
+}
+
 void write_html(int socket_fd, char *head, char *html)
 {
 	char headbuf[255];
@@ -136,7 +142,7 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
 	{
 		// cannot read request, so we'll stop
 		forbidden_403(socketfd, "failed to read http request");
-		exit(3);
+        abort_hit(socketfd, 3);
 	}
     
 	if (request_size > 0 && request_size < BUFSIZE)
@@ -161,7 +167,7 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
 	if (type = request_type(buffer), type == HTTP_NOT_SUPPORTED)
 	{
 		forbidden_403(socketfd, "Only simple GET and POST operations are supported");
-		exit(3);
+        abort_hit(socketfd, 3);
 	}
 	
 	// get a pointer to the request body (or NULL if it's not there)
@@ -184,13 +190,13 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
 		if(buffer[j] == '.' && buffer[j+1] == '.')
 		{
 			forbidden_403(socketfd, "Parent paths (..) are not supported");
-			exit(3);
+            abort_hit(socketfd, 3);
 		}
 	}
 	
 	// call the "responder function" which has been provided to do the rest
 	responder_func((type==HTTP_GET) ? &buffer[5] : &buffer[6], body, socketfd, type);
-	exit(1);
+    abort_hit(socketfd, 1);
 }
 
 int dwebserver(int port,
