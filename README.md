@@ -16,7 +16,7 @@ int main(int argc, char **argv)
 		printf("hint: dweb [port number]\n");
 		exit(0);
 	}
-	dwebserver(atoi(argv[1]), &test_response);
+	dwebserver(atoi(argv[1]), &test_response, NULL);
 }
 
 void test_response(char *path, char *body, int socketfd, http_verb type)
@@ -30,7 +30,7 @@ void test_response(char *path, char *body, int socketfd, http_verb type)
 I owe a lot to nweb: http://www.ibm.com/developerworks/systems/library/es-nweb/index.html 
 which was my starting point.  But I am adding support for things like HTTP POST and 
 serving up dynamic content.  Unlike nweb, this code does not run as a daemon, and logging
-goes to the console.
+goes to the console by default, although you can override the logging function.
 
 
 Building
