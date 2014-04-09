@@ -12,6 +12,7 @@
 #define HTTP_POST  102
 
 #define http_verb int
+#define log_type int
 
 struct http_header
 {
@@ -21,7 +22,7 @@ struct http_header
 
 int dwebserver(int port,
     void (*responder_func)(char*, char*, int, http_verb),
-    void (*logger_func)(int, char*, char*, int));
+    void (*logger_func)(log_type, char*, char*, int));
 
 struct http_header get_header(const char *name, char *request);
 
@@ -29,7 +30,7 @@ void write_html(int socket_fd, char *head, char *html);
 void forbidden_403(int socket_fd, char *info);
 void notfound_404(int socket_fd, char *info);
 void ok_200(int socket_fd, char *html, char *path);
-void logger(int type, char *s1, char *s2, int socket_fd);
+void logger(log_type type, char *s1, char *s2, int socket_fd);
 void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, http_verb));
 
 int get_form_values(char *body, char *names[], char *values[], int max_values);

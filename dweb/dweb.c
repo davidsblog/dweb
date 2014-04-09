@@ -3,7 +3,6 @@
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/types.h>
 #include <errno.h>
 
 #include "dwebsvr.h"
@@ -28,7 +27,7 @@ struct {
 	{0,0} };
 
 void send_response(char*, char*, int, http_verb);
-void log_filter(int, char*, char*, int);
+void log_filter(log_type, char*, char*, int);
 void send_api_response(char*, char*, int);
 void send_file_response(char*, char*, int, int);
 
@@ -37,13 +36,13 @@ int main(int argc, char **argv)
     if (argc != 2 || !strcmp(argv[1], "-?"))
 	{
 		printf("hint: dweb [port number]\n");
-		exit(0);
+		return 0;
 	}
     puts("dweb server starting\nPress CTRL+C to quit");
 	dwebserver(atoi(argv[1]), &send_response, &log_filter);
 }
 
-void log_filter(int type, char *s1, char *s2, int socket_fd)
+void log_filter(log_type type, char *s1, char *s2, int socket_fd)
 {
     if (type!=ERROR) return;
     printf("ERROR: %s: %s (errno=%d pid=%d socket=%d)\n",s1, s2, errno, getpid(), socket_fd);

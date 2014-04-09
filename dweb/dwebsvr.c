@@ -5,19 +5,20 @@
 #include <errno.h>
 #include <string.h>
 #include <fcntl.h>
-#include <signal.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
 
 #include "dwebsvr.h"
 
-void (*logger_function)(int, char*, char*, int);
+char *buffer = NULL;
+void (*logger_function)(log_type, char*, char*, int);
 
-void abort_hit(int socket_fd, int exit_code)
+void finish_hit(int socket_fd, int exit_code)
 {
     close(socket_fd);
+    if (buffer)
+    {
+        free(buffer);
+    }
     exit(exit_code);
 }
 
@@ -55,7 +56,7 @@ void ok_200(int socket_fd, char *html, char *path)
 	logger_function(LOG, "200 OK", path, socket_fd);
 }
 
-void default_logger(int type, char *title, char *description, int socket_fd)
+void default_logger(log_type type, char *title, char *description, int socket_fd)
 {
 	switch (type)
 	{
@@ -120,7 +121,7 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
 	int j;
 	http_verb type;
 	long i, body_size = 0, body_expected, request_size = 0;
-	static char buffer[BUFSIZE+1];	// static, filled with zeroes
+    buffer = calloc(BUFSIZE+1, 1); // will fill with zeroes
 	char *body;
     struct http_header content_length;
     
@@ -142,7 +143,7 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
 	{
 		// cannot read request, so we'll stop
 		forbidden_403(socketfd, "failed to read http request");
-        abort_hit(socketfd, 3);
+        finish_hit(socketfd, 3);
 	}
     
 	if (request_size > 0 && request_size < BUFSIZE)
@@ -167,7 +168,7 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
 	if (type = request_type(buffer), type == HTTP_NOT_SUPPORTED)
 	{
 		forbidden_403(socketfd, "Only simple GET and POST operations are supported");
-        abort_hit(socketfd, 3);
+        finish_hit(socketfd, 3);
 	}
 	
 	// get a pointer to the request body (or NULL if it's not there)
@@ -190,18 +191,18 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
 		if(buffer[j] == '.' && buffer[j+1] == '.')
 		{
 			forbidden_403(socketfd, "Parent paths (..) are not supported");
-            abort_hit(socketfd, 3);
+            finish_hit(socketfd, 3);
 		}
 	}
 	
 	// call the "responder function" which has been provided to do the rest
 	responder_func((type==HTTP_GET) ? &buffer[5] : &buffer[6], body, socketfd, type);
-    abort_hit(socketfd, 1);
+    finish_hit(socketfd, 1);
 }
 
 int dwebserver(int port,
     void (*responder_func)(char*, char*, int, http_verb),  // pointer to responder function
-    void (*logger_func)(int, char*, char*, int) )          // pointer to logger (or NULL)
+    void (*logger_func)(log_type, char*, char*, int) )     // pointer to logger (or NULL)
 {
 	int pid, listenfd, socketfd, hit;
 	socklen_t length;
