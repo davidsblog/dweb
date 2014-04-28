@@ -9,7 +9,7 @@
 
 #include "dwebsvr.h"
 
-char *buffer = NULL;
+STRING *buffer = NULL;
 void (*logger_function)(log_type, char*, char*, int);
 
 void finish_hit(int socket_fd, int exit_code)
@@ -17,18 +17,29 @@ void finish_hit(int socket_fd, int exit_code)
     close(socket_fd);
     if (buffer)
     {
-        free(buffer);
+        string_free(buffer);
     }
     exit(exit_code);
 }
 
+// writes the specified header and sets the Content-Length
+void write_header(int socket_fd, char *head, long content_len)
+{
+    STRING *header = new_string(255);
+    string_add(header, head);
+    string_add(header, "\nContent-Length: ");
+    char cl[10]; // 100Mb = 104,857,600 bytes
+    snprintf(cl, 10, "%ld", content_len);
+    string_add(header, cl);
+    string_add(header, "\r\n\r\n");
+    write(socket_fd, string_chars(header), header->used_bytes-1);
+    string_free(header);
+}
+
 void write_html(int socket_fd, char *head, char *html)
 {
-	char headbuf[255];
-	sprintf(headbuf, "%s\nContent-Length: %d\r\n\r\n", head, (int)strlen(html)+1);
-	write(socket_fd, headbuf, strlen(headbuf));
+    write_header(socket_fd, head, strlen(html));
 	write(socket_fd, html, strlen(html));
-	write(socket_fd, "\n", 1);
 }
 
 void forbidden_403(int socket_fd, char *info)
@@ -87,8 +98,9 @@ struct http_header get_header(const char *name, char *request)
     while (*ptr++!=':') ;
     while (isblank(*++ptr)) ;
     while (x<sizeof(retval.value)-1 && *ptr!='\r' && *ptr!='\n')
+    {
         retval.value[x++] = *ptr++;
-    
+    }
     retval.value[x]=0;
     return retval;
 }
@@ -121,22 +133,31 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
 	int j;
 	http_verb type;
 	long i, body_size = 0, body_expected, request_size = 0;
-    buffer = calloc(BUFSIZE+1, 1); // will fill with zeroes
+    char tmp_buf[TEMP_BUFSIZE+1];
 	char *body;
     struct http_header content_length;
+    buffer = new_string(8);
     
-    // we need to at least get the HTTP headers...
-    request_size = read(socketfd, buffer, BUFSIZE);
-    content_length = get_header("Content-Length", buffer);
+    // we need to read at least the HTTP headers...
+    memset(tmp_buf, 0, TEMP_BUFSIZE+1);
+    request_size = read(socketfd, tmp_buf, TEMP_BUFSIZE);
+    string_add(buffer, tmp_buf);
+    
+    content_length = get_header("Content-Length", string_chars(buffer));
     body_expected = atoi(content_length.value);
-    body_size = request_size - get_body_start(buffer);
+    body_size = request_size - get_body_start(string_chars(buffer));
     
     // safari seems to send the headers, and then the body later
     while (body_size < body_expected)
     {
-        i = read(socketfd, buffer+request_size, BUFSIZE-request_size);
-        if (i>0) request_size+=i;
-        body_size = request_size - get_body_start(buffer);
+        memset(tmp_buf, 0, TEMP_BUFSIZE+1);
+        i = read(socketfd, tmp_buf, TEMP_BUFSIZE);
+        if (i>0)
+        {
+            request_size+=i;
+            string_add(buffer, tmp_buf);
+        }
+        body_size = request_size - get_body_start(string_chars(buffer));
     }
     
     if (request_size == 0 || request_size == -1)
@@ -146,41 +167,33 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
         finish_hit(socketfd, 3);
 	}
     
-	if (request_size > 0 && request_size < BUFSIZE)
-	{
-		buffer[request_size] = 0; // null terminate after chars
-	}
-	else
-	{
-		buffer[0] = 0;
-	}
-    logger_function(LOG, "request", buffer, hit);
+    logger_function(LOG, "request", string_chars(buffer), hit);
     
 	for (i=0; i<request_size; i++)
 	{
 		// replace CF and LF with asterisks
-		if(buffer[i] == '\r' || buffer[i] == '\n')
+		if(string_chars(buffer)[i] == '\r' || string_chars(buffer)[i] == '\n')
 		{
-			buffer[i]='*';
+			string_chars(buffer)[i]='*';
 		}
 	}
 	
-	if (type = request_type(buffer), type == HTTP_NOT_SUPPORTED)
+	if (type = request_type(string_chars(buffer)), type == HTTP_NOT_SUPPORTED)
 	{
 		forbidden_403(socketfd, "Only simple GET and POST operations are supported");
         finish_hit(socketfd, 3);
 	}
 	
 	// get a pointer to the request body (or NULL if it's not there)
-	body = strstr(buffer, "****") + 4;
+	body = strstr(string_chars(buffer), "****") + 4;
 	
 	// the request will be "GET URL " or "POST URL " followed by other details
 	// we will terminate after the second space, to ignore everything else
-	for (i = (type==HTTP_GET) ? 4 : 5; i<BUFSIZE; i++)
+	for (i = (type==HTTP_GET) ? 4 : 5; i < buffer->used_bytes; i++)
 	{
-		if(buffer[i] == ' ')
+		if(string_chars(buffer)[i] == ' ')
 		{
-			buffer[i] = 0; // second space, terminate string here
+			string_chars(buffer)[i] = 0; // second space, terminate string here
 			break;
 		}
 	}
@@ -188,7 +201,7 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
 	for (j=0; j<i-1; j++)
 	{
 		// check for parent directory use
-		if(buffer[j] == '.' && buffer[j+1] == '.')
+		if (string_chars(buffer)[j] == '.' && string_chars(buffer)[j+1] == '.')
 		{
 			forbidden_403(socketfd, "Parent paths (..) are not supported");
             finish_hit(socketfd, 3);
@@ -196,7 +209,7 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
 	}
 	
 	// call the "responder function" which has been provided to do the rest
-	responder_func((type==HTTP_GET) ? &buffer[5] : &buffer[6], body, socketfd, type);
+	responder_func((type==HTTP_GET) ? string_chars(buffer)+5 : string_chars(buffer)+6, body, socketfd, type);
     finish_hit(socketfd, 1);
 }
 
@@ -338,3 +351,63 @@ int get_form_values(char *body, char *names[], char *values[], int max_values)
     }
 	return t;
 }
+
+/* ---------- Memory allocation helpers ---------- */
+
+void bcreate(blk *b, int elem_size, int inc)
+{
+    b->elem_bytes = elem_size;
+    b->chunk_size = inc;
+    b->ptr = calloc(b->chunk_size, b->elem_bytes);
+    b->alloc_bytes = b->chunk_size * b->elem_bytes;
+    b->used_bytes = 0;
+}
+
+void badd(blk *b, void *data, int len)
+{
+    if (b->alloc_bytes - b->used_bytes < len)
+    {
+        while (b->alloc_bytes - b->used_bytes < len)
+        {
+			b->alloc_bytes+= (b->chunk_size * b->elem_bytes);
+        }
+        b->ptr=realloc(b->ptr, b->alloc_bytes);
+    }
+    memcpy(b->ptr + b->used_bytes, data, len);
+    b->used_bytes += len;
+    memset(b->ptr + b->used_bytes, 0, b->alloc_bytes - b->used_bytes);
+}
+
+void bfree(blk *b)
+{
+    free(b->ptr);
+    b->used_bytes = 0;
+    b->alloc_bytes = 0;
+}
+
+STRING* new_string(int increments)
+{
+	STRING *s = malloc(sizeof(STRING));
+	bcreate(s, 1, increments);
+	badd(s, "\0", 1);
+	return s;
+}
+
+void string_add(STRING *s, char *char_array)
+{
+    s->used_bytes--;
+    badd(s, char_array, (int)strlen(char_array)+1);
+}
+
+char* string_chars(STRING *s)
+{
+	return s->ptr;
+}
+
+void string_free(STRING *s)
+{
+	bfree(s);
+	free(s);
+}
+
+/* ---------- End of memory allocation helpers ---------- */

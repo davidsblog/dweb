@@ -8,6 +8,8 @@
 #include "dwebsvr.h"
 
 #define MAX_FORM_VALUES 10
+#define FILE_CHUNK_SIZE 1024
+#define BIGGEST_FILE 104857600 // 100 Mb
 
 struct {
 	char *ext;
@@ -87,19 +89,28 @@ void send_file_response(char *path, char *request_body, int socketfd, int path_l
 {
 	int file_id, i;
 	long len;
-	char *content_type = NULL, response[BUFSIZE+1];
+	char *content_type = NULL;
+    STRING *response = new_string(FILE_CHUNK_SIZE);
 	char *form_names[MAX_FORM_VALUES], *form_values[MAX_FORM_VALUES];
-	
+    
 	i = get_form_values(request_body, form_names, form_values, MAX_FORM_VALUES);
 	if (i == 2)
 	{
-		sprintf(response, "<html><head><title>Response Page</title></head>"
-			"<body><h1>Thanks...</h1>You entered:<br/>"
-			"%s is %s<br/>"
-			"%s is %s<br/>"
-			"</body></html>", form_names[0], form_values[0], form_names[1], form_values[1]);
+        string_add(response, "<html><head><title>Response Page</title></head>");
+        string_add(response, "<body><h1>Thanks...</h1>You entered:<br/>");
+        string_add(response, form_names[0]);
+        string_add(response, " is ");
+        string_add(response, form_values[0]);
+        string_add(response, "<br/>");
+        string_add(response, form_names[1]);
+        string_add(response, " is ");
+        string_add(response, form_values[1]);
+        string_add(response, "<br/>");
+        string_add(response, "</body></html>");
 		
-		return ok_200(socketfd, response, path);
+		ok_200(socketfd, string_chars(response), path);
+        string_free(response);
+        return;
 	}
 	
 	// work out the file type and check we support it
@@ -112,28 +123,41 @@ void send_file_response(char *path, char *request_body, int socketfd, int path_l
 			break;
 		}
 	}
-	if (content_type==NULL)
+	if (content_type == NULL)
 	{
-		return forbidden_403(socketfd, "file extension type not supported");
+		string_free(response);
+        return forbidden_403(socketfd, "file extension type not supported");
 	}
 	
 	if (file_id = open(path, O_RDONLY), file_id == -1)
 	{
-		return notfound_404(socketfd, "failed to open file");
+		string_free(response);
+        return notfound_404(socketfd, "failed to open file");
 	}
 	
 	// open the file for reading
 	len = (long)lseek(file_id, (off_t)0, SEEK_END); // lseek to the file end to find the length
-	lseek(file_id, (off_t)0, SEEK_SET); // lseek back to the file start ready for reading
-    sprintf(response, "HTTP/1.1 200 OK\nServer: dweb\nContent-Length: %ld\nConnection: close\n"
-            "Content-Type: %s\r\n\r\n", len, content_type); // headers
-	write(socketfd, response, strlen(response));
-
-	// send file in blocks (the last block could be smaller)
-	while ((len = read(file_id, response, BUFSIZE)) > 0)
+	lseek(file_id, (off_t)0, SEEK_SET); // lseek back to the file start
+    
+    if (len > BIGGEST_FILE)
+    {
+        string_free(response);
+        return forbidden_403(socketfd, "files this large are not supported");
+    }
+    
+    string_add(response, "HTTP/1.1 200 OK\nServer: dweb\n");
+    string_add(response, "Connection: close\n");
+    string_add(response, "Content-Type: ");
+    string_add(response, content_type);
+    write_header(socketfd, string_chars(response), len);
+    
+	// send file in blocks
+	while ((len = read(file_id, response->ptr, FILE_CHUNK_SIZE)) > 0)
 	{
-		write(socketfd, response, len);
+		write(socketfd, response->ptr, len);
 	}
-    // allow socket to drain before signalling the socket is closed
+    string_free(response);
+    
+    // allow socket to drain before closing
 	sleep(1);
 }
