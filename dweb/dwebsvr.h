@@ -2,9 +2,6 @@
 
 #define _DWEBSVR_H
 
-// must be big enough to store the http headers
-#define TEMP_BUFSIZE  512
-
 #define ERROR    42
 #define LOG      43
 

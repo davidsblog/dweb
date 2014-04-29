@@ -110,7 +110,7 @@ long get_body_start(char *request)
     // return the starting index of the request body
     // so ... just find the end of the HTTP headers
     char *ptr = strstr(request, "\r\n\r\n");
-    return (ptr+4) - request;
+    return (ptr==NULL) ? -1 : (ptr+4) - request;
 }
 
 http_verb request_type(char *request)
@@ -127,40 +127,48 @@ http_verb request_type(char *request)
 	return HTTP_NOT_SUPPORTED;
 }
 
+// We will read data from the socket in chunks of this size
+#define READ_BUF_LEN 255
+
 // this is a child web server process, we can safely exit on errors
 void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, http_verb))
 {
 	int j;
 	http_verb type;
-	long i, body_size = 0, body_expected, request_size = 0;
-    char tmp_buf[TEMP_BUFSIZE+1];
+	long i, body_size = 0, body_expected, request_size = 0, body_start;
+    char tmp_buf[READ_BUF_LEN+1];
 	char *body;
     struct http_header content_length;
-    buffer = new_string(8);
+    buffer = new_string(128);
     
-    // we need to read at least the HTTP headers...
-    memset(tmp_buf, 0, TEMP_BUFSIZE+1);
-    request_size = read(socketfd, tmp_buf, TEMP_BUFSIZE);
-    string_add(buffer, tmp_buf);
+    // we need to read the HTTP headers first...
+    // so loop until we receive "\r\n\r\n"
+    while (get_body_start(string_chars(buffer))<0)
+    {
+        memset(tmp_buf, 0, READ_BUF_LEN+1);
+        request_size += read(socketfd, tmp_buf, READ_BUF_LEN);
+        string_add(buffer, tmp_buf);
+    }
     
     content_length = get_header("Content-Length", string_chars(buffer));
     body_expected = atoi(content_length.value);
-    body_size = request_size - get_body_start(string_chars(buffer));
+    body_start = get_body_start(string_chars(buffer));
+    if (body_start>=0) body_size = request_size - body_start;
     
-    // safari seems to send the headers, and then the body later
+    // safari seems to send the headers, and then the body slightly later
     while (body_size < body_expected)
     {
-        memset(tmp_buf, 0, TEMP_BUFSIZE+1);
-        i = read(socketfd, tmp_buf, TEMP_BUFSIZE);
+        memset(tmp_buf, 0, READ_BUF_LEN+1);
+        i = read(socketfd, tmp_buf, READ_BUF_LEN);
         if (i>0)
         {
-            request_size+=i;
+            request_size += i;
             string_add(buffer, tmp_buf);
         }
-        body_size = request_size - get_body_start(string_chars(buffer));
+        body_size = request_size - body_start;
     }
     
-    if (request_size == 0 || request_size == -1)
+    if (request_size <= 0)
 	{
 		// cannot read request, so we'll stop
 		forbidden_403(socketfd, "failed to read http request");
