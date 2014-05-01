@@ -139,7 +139,7 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
     char tmp_buf[READ_BUF_LEN+1];
 	char *body;
     struct http_header content_length;
-    buffer = new_string(128);
+    buffer = new_string(READ_BUF_LEN);
     
     // we need to read the HTTP headers first...
     // so loop until we receive "\r\n\r\n"
@@ -227,7 +227,7 @@ int dwebserver(int port,
 {
 	int pid, listenfd, socketfd, hit;
 	socklen_t length;
-    // static = initialised to zeros
+    // *static* means the compiler will make them initialised to zeros
 	static struct sockaddr_in cli_addr;
 	static struct sockaddr_in serv_addr;
     
