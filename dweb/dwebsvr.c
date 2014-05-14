@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <signal.h>
 #include <fcntl.h>
 #include <arpa/inet.h>
 
@@ -19,7 +20,7 @@ void finish_hit(int socket_fd, int exit_code)
     {
         string_free(buffer);
     }
-    exit(exit_code);
+    //exit(exit_code);
 }
 
 // writes the specified header and sets the Content-Length
@@ -284,6 +285,15 @@ int dwebserver(int port,
 			logger_function(ERROR, "system call", "accept", 0);
 			exit(3);
 		}
+        
+        // TODO: allow single-process for testing...
+        if (1==1)
+        {
+            //close(listenfd);
+            webhit(socketfd, hit, responder_func);
+            continue;
+        }
+        
 		if ((pid = fork()) < 0)
 		{
 			logger_function(ERROR, "system call", "fork", 0);
