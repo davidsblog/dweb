@@ -10,8 +10,65 @@
 
 #include "dwebsvr.h"
 
+// uncomment the following line for a single-threaded web server, which
+// might be useful for debugging or embedded use
+//#define SINGLE_THREADED
+
 STRING *buffer = NULL;
+FORM_VALUE *form_values = NULL;
+int form_value_counter=0;
+
 void (*logger_function)(log_type, char*, char*, int);
+
+#define FORM_VALUE_BLOCK 10
+
+// assumes a content type of "application/x-www-form-urlencoded" (the default type)
+void get_form_values(char *body)
+{
+    int t=0, i, alloc = FORM_VALUE_BLOCK;
+	char *tmp, *token = strtok(body, "&");
+    
+    form_values = malloc(alloc * sizeof(FORM_VALUE));
+    memset(form_values, 0, alloc * sizeof(FORM_VALUE));
+    
+    while(token != NULL)
+    {
+        tmp = malloc(strlen(token)+1);
+        strcpy(tmp, token);
+        url_decode(tmp);
+        
+		for (i=0; i<strlen(tmp); i++)
+			if (tmp[i]=='=') break;
+        
+        if (alloc<=t)
+        {
+            int newsize = alloc+FORM_VALUE_BLOCK;
+            form_values = realloc(form_values, newsize * sizeof(FORM_VALUE));
+            memset(form_values+alloc, 0, FORM_VALUE_BLOCK * sizeof(FORM_VALUE));
+            alloc = newsize;
+        }
+        
+        form_values[t].data = malloc(strlen(tmp)+1);
+        strcpy(form_values[t].data, tmp);
+        form_values[t].name = form_values[t].data;
+        form_values[t].value = form_values[t].data+1+i;
+		form_values[t++].data[i] = 0;
+        
+		token = strtok(NULL, "&");
+        free (tmp);
+    }
+    form_value_counter = t;
+}
+
+void clear_form_values()
+{
+    if (form_values == NULL) return;
+    for (form_value_counter--; form_value_counter>=0; form_value_counter--)
+    {
+        free(form_values[form_value_counter].data);
+    }
+    free(form_values);
+}
 
 void finish_hit(int socket_fd, int exit_code)
 {
@@ -20,7 +77,11 @@ void finish_hit(int socket_fd, int exit_code)
     {
         string_free(buffer);
     }
-    //exit(exit_code);
+    clear_form_values();
+    
+#ifndef SINGLE_THREADED
+    exit(exit_code);
+#endif
 }
 
 // writes the specified header and sets the Content-Length
@@ -92,7 +153,7 @@ struct http_header get_header(const char *name, char *request)
     
     if (ptr == NULL)
     {
-        retval.value[0]=0;
+        retval.value[0] = 0;
         return retval;
     }
     
@@ -216,6 +277,8 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
             finish_hit(socketfd, 3);
 		}
 	}
+    
+    get_form_values(body);
 	
 	// call the "responder function" which has been provided to do the rest
 	responder_func((type==HTTP_GET) ? string_chars(buffer)+5 : string_chars(buffer)+6, body, socketfd, type);
@@ -226,7 +289,10 @@ int dwebserver(int port,
     void (*responder_func)(char*, char*, int, http_verb),  // pointer to responder function
     void (*logger_func)(log_type, char*, char*, int) )     // pointer to logger (or NULL)
 {
-	int pid, listenfd, socketfd, hit;
+#ifndef SINGLE_THREADED
+    int pid;
+#endif
+    int listenfd, socketfd, hit;
 	socklen_t length;
     // *static* means the compiler will make them initialised to zeros
 	static struct sockaddr_in cli_addr;
@@ -246,7 +312,7 @@ int dwebserver(int port,
 		logger_function(ERROR, "Invalid port number (try 1 - 60000)", "", 0);
 		exit(3);
 	}
-	
+    
      // ignore child death and terminal hangups
 #ifndef SIGCLD
 	signal(SIGCHLD, SIG_IGN);
@@ -254,7 +320,7 @@ int dwebserver(int port,
 	signal(SIGCLD, SIG_IGN);
 #endif
     signal(SIGHUP, SIG_IGN);
-	
+    
     if ((listenfd = socket(AF_INET, SOCK_STREAM,0)) < 0)
 	{
 		logger_function(ERROR, "system call", "socket", 0);
@@ -276,7 +342,7 @@ int dwebserver(int port,
 		logger_function(ERROR, "system call", "listen", 0);
 		exit(3);
 	}
-
+    
 	for (hit=1; ; hit++)
 	{
 		length = sizeof(cli_addr);
@@ -286,14 +352,9 @@ int dwebserver(int port,
 			exit(3);
 		}
         
-        // TODO: allow single-process for testing...
-        if (1==1)
-        {
-            //close(listenfd);
-            webhit(socketfd, hit, responder_func);
-            continue;
-        }
-        
+#ifdef SINGLE_THREADED
+        webhit(socketfd, hit, responder_func);
+#else
 		if ((pid = fork()) < 0)
 		{
 			logger_function(ERROR, "system call", "fork", 0);
@@ -307,13 +368,18 @@ int dwebserver(int port,
 				close(listenfd);
 				webhit(socketfd, hit, responder_func); // never returns
 			}
-			else
-			{
-				// parent
+            else
+            {
                 close(socketfd);
-			}
+            }
 		}
+#endif
+
 	}
+    
+#ifdef SINGLE_THREADED
+    close(listenfd);
+#endif
 }
 
 // The same algorithm as found here:
@@ -345,29 +411,21 @@ void url_decode(char *s)
     strcpy(s, s_copy);
 }
 
-// assumes a content type of "application/x-www-form-urlencoded" (the default type)
-int get_form_values(char *body, char *names[], char *values[], int max_values)
+int form_value_count()
 {
-	int t=0, i;
-	char *token = strtok(body, "&");
-	
-    while(token != NULL && t < max_values)
-    {
-        names[t] = token;
-		for (i=0; i<strlen(token); i++)
-		{
-			if (token[i]=='=')
-			{
-				token[i] = 0;
-				values[t] = token+i+1;
-				break;
-			}
-		}
-		url_decode(names[t]);
-		url_decode(values[t++]);
-		token = strtok(NULL, "&");
-    }
-	return t;
+    return form_value_counter;
+}
+
+char* form_value(int i)
+{
+    if (i>=form_value_counter) return NULL;
+    return form_values[i].value;
+}
+
+char* form_name(int i)
+{
+    if (i>=form_value_counter) return NULL;
+    return form_values[i].name;
 }
 
 /* ---------- Memory allocation helpers ---------- */

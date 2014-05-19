@@ -32,7 +32,10 @@ void ok_200(int socket_fd, char *html, char *path);
 void logger(log_type type, char *s1, char *s2, int socket_fd);
 void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, http_verb));
 
-int get_form_values(char *body, char *names[], char *values[], int max_values);
+int form_value_count();
+char* form_value(int i);
+char* form_name(int i);
+
 void url_decode(char *s);
 
 /* ---------- Memory allocation helper stuff ---------- */
@@ -54,5 +57,11 @@ char* string_chars(STRING *s);
 void string_free(STRING *s);
 
 /* ---------- End of memory allocation helper stuff ---------- */
+
+typedef struct
+{
+    char *name, *value;
+    char *data;
+} FORM_VALUE;
 
 #endif

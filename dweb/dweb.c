@@ -7,7 +7,6 @@
 
 #include "dwebsvr.h"
 
-#define MAX_FORM_VALUES 10
 #define FILE_CHUNK_SIZE 1024
 #define BIGGEST_FILE 104857600 // 100 Mb
 
@@ -68,13 +67,11 @@ void send_response(char *path, char *request_body, int socketfd, http_verb type)
 // a simple API, it receives a number, increments it and returns the response
 void send_api_response(char *path, char *request_body, int socketfd)
 {
-	char *form_names[1], *form_values[1];
 	char response[4];
-	int i = get_form_values(request_body, form_names, form_values, 1);
 	
-	if (i==1 && !strncmp(form_names[0], "counter", strlen(form_names[0])))
+	if (form_value_count()==1 && !strncmp(form_name(0), "counter", strlen(form_name(0))))
 	{
-		int c = atoi(form_values[0]);
+		int c = atoi(form_value(0));
 		if (c>998) c=0;
 		sprintf(response, "%d", ++c);
 		return ok_200(socketfd, response, path);
@@ -91,20 +88,18 @@ void send_file_response(char *path, char *request_body, int socketfd, int path_l
 	long len;
 	char *content_type = NULL;
     STRING *response = new_string(FILE_CHUNK_SIZE);
-	char *form_names[MAX_FORM_VALUES], *form_values[MAX_FORM_VALUES];
-    
-	i = get_form_values(request_body, form_names, form_values, MAX_FORM_VALUES);
-	if (i == 2)
+	
+	if (form_value_count() == 2)
 	{
         string_add(response, "<html><head><title>Response Page</title></head>");
         string_add(response, "<body><h1>Thanks...</h1>You entered:<br/>");
-        string_add(response, form_names[0]);
+        string_add(response, form_name(0));
         string_add(response, " is ");
-        string_add(response, form_values[0]);
+        string_add(response, form_value(0));
         string_add(response, "<br/>");
-        string_add(response, form_names[1]);
+        string_add(response, form_name(1));
         string_add(response, " is ");
-        string_add(response, form_values[1]);
+        string_add(response, form_value(1));
         string_add(response, "<br/>");
         string_add(response, "</body></html>");
 		
