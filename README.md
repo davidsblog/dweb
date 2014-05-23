@@ -7,7 +7,7 @@ I'm planning to use it as a very small Web API, most likely hosted on a Raspberr
 The idea is to be able to serve dynamic web content from simple C programs, without
 having to add too much code.  So the trivial example looks like this:
 ```
-void test_response(char*, char*, int, http_verb);
+void test_response(struct hitArgs*, char*, char*, http_verb);
 
 int main(int argc, char **argv)
 {
@@ -19,9 +19,9 @@ int main(int argc, char **argv)
 	dwebserver(atoi(argv[1]), &test_response, NULL);
 }
 
-void test_response(char *path, char *body, int socketfd, http_verb type)
+void test_response(struct hitArgs *args, char *path, char *request_body, http_verb type)
 {
-	ok_200(socketfd,
+	ok_200(args,
 		"<html><head><title>Test Page</title></head>"
 		"<body><h1>Testing...</h1>This is a test response.</body>"
 		"</html>", path);
