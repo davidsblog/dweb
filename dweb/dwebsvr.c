@@ -1,3 +1,7 @@
+// set the correct mode here, options are:
+// SINGLE_THREADED, MULTI_PROCESS, OR MULTI_THREADED
+#define MODE MULTI_THREADED
+
 #include <stdio.h>
 #include <ctype.h>
 #include <stdlib.h>
@@ -7,29 +11,26 @@
 #include <signal.h>
 #include <fcntl.h>
 #include <arpa/inet.h>
+#if MODE == MULTI_THREADED
+    #include <pthread.h>
+#endif
 
 #include "dwebsvr.h"
 
-// uncomment the following line for a single-threaded web server, which
-// might be useful for debugging or embedded use
-//#define SINGLE_THREADED
-
-STRING *buffer = NULL;
-FORM_VALUE *form_values = NULL;
-int form_value_counter=0;
-
-void (*logger_function)(log_type, char*, char*, int);
-
+// get_form_values() will allocate memory in blocks of this size
 #define FORM_VALUE_BLOCK 10
 
+// a global place to store the listening socket descriptor
+int listenfd;
+
 // assumes a content type of "application/x-www-form-urlencoded" (the default type)
-void get_form_values(char *body)
+void get_form_values(struct hitArgs *args, char *body)
 {
     int t=0, i, alloc = FORM_VALUE_BLOCK;
 	char *tmp, *token = strtok(body, "&");
     
-    form_values = malloc(alloc * sizeof(FORM_VALUE));
-    memset(form_values, 0, alloc * sizeof(FORM_VALUE));
+    args->form_values = malloc(alloc * sizeof(FORM_VALUE));
+    memset(args->form_values, 0, alloc * sizeof(FORM_VALUE));
     
     while(token != NULL)
     {
@@ -43,44 +44,47 @@ void get_form_values(char *body)
         if (alloc<=t)
         {
             int newsize = alloc+FORM_VALUE_BLOCK;
-            form_values = realloc(form_values, newsize * sizeof(FORM_VALUE));
-            memset(form_values+alloc, 0, FORM_VALUE_BLOCK * sizeof(FORM_VALUE));
+            args->form_values = realloc(args->form_values, newsize * sizeof(FORM_VALUE));
+            memset(args->form_values+alloc, 0, FORM_VALUE_BLOCK * sizeof(FORM_VALUE));
             alloc = newsize;
         }
         
-        form_values[t].data = malloc(strlen(tmp)+1);
-        strcpy(form_values[t].data, tmp);
-        form_values[t].name = form_values[t].data;
-        form_values[t].value = form_values[t].data+1+i;
-		form_values[t++].data[i] = 0;
+        args->form_values[t].data = malloc(strlen(tmp)+1);
+        strcpy(args->form_values[t].data, tmp);
+        args->form_values[t].name = args->form_values[t].data;
+        args->form_values[t].value = args->form_values[t].data+1+i;
+		args->form_values[t++].data[i] = 0;
         
 		token = strtok(NULL, "&");
         free (tmp);
     }
-    form_value_counter = t;
+    args->form_value_counter = t;
 }
 
-void clear_form_values()
+void clear_form_values(struct hitArgs *args)
 {
-    if (form_values == NULL) return;
-    for (form_value_counter--; form_value_counter>=0; form_value_counter--)
+    if (args->form_values == NULL) return;
+    for (args->form_value_counter--; args->form_value_counter>=0; args->form_value_counter--)
     {
-        free(form_values[form_value_counter].data);
+        free(args->form_values[args->form_value_counter].data);
     }
-    free(form_values);
+    free(args->form_values);
 }
 
-void finish_hit(int socket_fd, int exit_code)
+void finish_hit(struct hitArgs *args, int exit_code)
 {
-    close(socket_fd);
-    if (buffer)
+    close(args->socketfd);
+    if (args->buffer)
     {
-        string_free(buffer);
+        string_free(args->buffer);
     }
-    clear_form_values();
+    clear_form_values(args);
+    free(args);
     
-#ifndef SINGLE_THREADED
+#if MODE == MULTI_PROCESS
     exit(exit_code);
+#elif MODE == MULTI_THREADED
+    pthread_exit(NULL);
 #endif
 }
 
@@ -104,29 +108,33 @@ void write_html(int socket_fd, char *head, char *html)
 	write(socket_fd, html, strlen(html));
 }
 
-void forbidden_403(int socket_fd, char *info)
+void forbidden_403(struct hitArgs *args, char *info)
 {
-	write_html(socket_fd, "HTTP/1.1 403 Forbidden\nServer: dweb\nConnection: close\nContent-Type: text/html", 
+	write_html(args->socketfd,
+        "HTTP/1.1 403 Forbidden\nServer: dweb\nConnection: close\nContent-Type: text/html",
 		"<html><head>\n<title>403 Forbidden</title>\n"
 		"</head><body>\n<h1>Forbidden</h1>\nThe requested URL, file type or operation is not allowed on this simple webserver.\n</body>"
 		"</html>");
-	logger_function(LOG, "403 FORBIDDEN", info, socket_fd);
+	args->logger_function(LOG, "403 FORBIDDEN", info, args->socketfd);
 }
 
-void notfound_404(int socket_fd, char *info)
+void notfound_404(struct hitArgs *args, char *info)
 {
-	write_html(socket_fd, "HTTP/1.1 404 Not Found\nServer: dweb\nConnection: close\nContent-Type: text/html",
+	write_html(args->socketfd,
+        "HTTP/1.1 404 Not Found\nServer: dweb\nConnection: close\nContent-Type: text/html",
 		"<html><head>\n<title>404 Not Found</title>\n"
 		"</head><body>\n<h1>Not Found</h1>\nThe requested URL was not found on this server.\n</body></html>");
 
-	logger_function(LOG, "404 NOT FOUND", info, socket_fd);
+	args->logger_function(LOG, "404 NOT FOUND", info, args->socketfd);
 }
 
-void ok_200(int socket_fd, char *html, char *path)
+void ok_200(struct hitArgs *args, char *html, char *path)
 {
-	write_html(socket_fd, "HTTP/1.1 200 OK\nServer: dweb\nCache-Control: no-cache\nPragma: no-cache\nContent-Type: text/html", html);
+	write_html(args->socketfd,
+        "HTTP/1.1 200 OK\nServer: dweb\nCache-Control: no-cache\nPragma: no-cache\nContent-Type: text/html",
+        html);
 	
-	logger_function(LOG, "200 OK", path, socket_fd);
+	args->logger_function(LOG, "200 OK", path, args->socketfd);
 }
 
 void default_logger(log_type type, char *title, char *description, int socket_fd)
@@ -189,11 +197,10 @@ http_verb request_type(char *request)
 	return HTTP_NOT_SUPPORTED;
 }
 
-// We will read data from the socket in chunks of this size
+// webhit() will read data from the socket in chunks of this size
 #define READ_BUF_LEN 255
 
-// this is a child web server process, we can safely exit on errors
-void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, http_verb))
+void webhit(struct hitArgs *args)
 {
 	int j;
 	http_verb type;
@@ -201,31 +208,31 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
     char tmp_buf[READ_BUF_LEN+1];
 	char *body;
     struct http_header content_length;
-    buffer = new_string(READ_BUF_LEN);
+    args->buffer = new_string(READ_BUF_LEN);
     
     // we need to read the HTTP headers first...
     // so loop until we receive "\r\n\r\n"
-    while (get_body_start(string_chars(buffer))<0)
+    while (get_body_start(string_chars(args->buffer))<0)
     {
         memset(tmp_buf, 0, READ_BUF_LEN+1);
-        request_size += read(socketfd, tmp_buf, READ_BUF_LEN);
-        string_add(buffer, tmp_buf);
+        request_size += read(args->socketfd, tmp_buf, READ_BUF_LEN);
+        string_add(args->buffer, tmp_buf);
     }
     
-    content_length = get_header("Content-Length", string_chars(buffer));
+    content_length = get_header("Content-Length", string_chars(args->buffer));
     body_expected = atoi(content_length.value);
-    body_start = get_body_start(string_chars(buffer));
+    body_start = get_body_start(string_chars(args->buffer));
     if (body_start>=0) body_size = request_size - body_start;
     
     // safari seems to send the headers, and then the body slightly later
     while (body_size < body_expected)
     {
         memset(tmp_buf, 0, READ_BUF_LEN+1);
-        i = read(socketfd, tmp_buf, READ_BUF_LEN);
+        i = read(args->socketfd, tmp_buf, READ_BUF_LEN);
         if (i>0)
         {
             request_size += i;
-            string_add(buffer, tmp_buf);
+            string_add(args->buffer, tmp_buf);
         }
         body_size = request_size - body_start;
     }
@@ -233,37 +240,37 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
     if (request_size <= 0)
 	{
 		// cannot read request, so we'll stop
-		forbidden_403(socketfd, "failed to read http request");
-        finish_hit(socketfd, 3);
+		forbidden_403(args, "failed to read http request");
+        finish_hit(args, 3);
 	}
     
-    logger_function(LOG, "request", string_chars(buffer), hit);
+    args->logger_function(LOG, "request", string_chars(args->buffer), args->hit);
     
 	for (i=0; i<request_size; i++)
 	{
 		// replace CF and LF with asterisks
-		if(string_chars(buffer)[i] == '\r' || string_chars(buffer)[i] == '\n')
+		if(string_chars(args->buffer)[i] == '\r' || string_chars(args->buffer)[i] == '\n')
 		{
-			string_chars(buffer)[i]='*';
+			string_chars(args->buffer)[i]='*';
 		}
 	}
 	
-	if (type = request_type(string_chars(buffer)), type == HTTP_NOT_SUPPORTED)
+	if (type = request_type(string_chars(args->buffer)), type == HTTP_NOT_SUPPORTED)
 	{
-		forbidden_403(socketfd, "Only simple GET and POST operations are supported");
-        finish_hit(socketfd, 3);
+		forbidden_403(args, "Only simple GET and POST operations are supported");
+        finish_hit(args, 3);
 	}
 	
 	// get a pointer to the request body (or NULL if it's not there)
-	body = strstr(string_chars(buffer), "****") + 4;
+	body = strstr(string_chars(args->buffer), "****") + 4;
 	
 	// the request will be "GET URL " or "POST URL " followed by other details
 	// we will terminate after the second space, to ignore everything else
-	for (i = (type==HTTP_GET) ? 4 : 5; i < buffer->used_bytes; i++)
+	for (i = (type==HTTP_GET) ? 4 : 5; i < args->buffer->used_bytes; i++)
 	{
-		if(string_chars(buffer)[i] == ' ')
+		if(string_chars(args->buffer)[i] == ' ')
 		{
-			string_chars(buffer)[i] = 0; // second space, terminate string here
+			string_chars(args->buffer)[i] = 0; // second space, terminate string here
 			break;
 		}
 	}
@@ -271,45 +278,56 @@ void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, htt
 	for (j=0; j<i-1; j++)
 	{
 		// check for parent directory use
-		if (string_chars(buffer)[j] == '.' && string_chars(buffer)[j+1] == '.')
+		if (string_chars(args->buffer)[j] == '.' && string_chars(args->buffer)[j+1] == '.')
 		{
-			forbidden_403(socketfd, "Parent paths (..) are not supported");
-            finish_hit(socketfd, 3);
+			forbidden_403(args, "Parent paths (..) are not supported");
+            finish_hit(args, 3);
 		}
 	}
     
-    get_form_values(body);
+    get_form_values(args, body);
 	
 	// call the "responder function" which has been provided to do the rest
-	responder_func((type==HTTP_GET) ? string_chars(buffer)+5 : string_chars(buffer)+6, body, socketfd, type);
-    finish_hit(socketfd, 1);
+	args->responder_function(args, (type==HTTP_GET)
+        ? string_chars(args->buffer)+5
+        : string_chars(args->buffer)+6, body, type);
+    finish_hit(args, 1);
+}
+
+#if MODE == MULTI_THREADED
+void* threadMain(void *targs)
+{
+    pthread_detach(pthread_self());
+    struct hitArgs *args = (struct hitArgs*)targs;
+    webhit(args);
+    return NULL;
+}
+#endif
+
+void inthandler(int sig)
+{
+    puts("");
+    puts("webserver shutting down");
+    close(listenfd);
+    exit(0);
 }
 
 int dwebserver(int port,
-    void (*responder_func)(char*, char*, int, http_verb),  // pointer to responder function
+    void (*responder_func)(struct hitArgs *args, char*, char*, http_verb),  // pointer to responder func
     void (*logger_func)(log_type, char*, char*, int) )     // pointer to logger (or NULL)
 {
-#ifndef SINGLE_THREADED
+#if MODE == MULTI_PROCESS
     int pid;
 #endif
-    int listenfd, socketfd, hit;
+    int socketfd, hit;
 	socklen_t length;
     // *static* means the compiler will make them initialised to zeros
 	static struct sockaddr_in cli_addr;
 	static struct sockaddr_in serv_addr;
     
-    if (logger_func != NULL)
-    {
-        logger_function = logger_func;
-    }
-    else
-    {
-        logger_function = &default_logger;
-    }
-    
 	if (port <= 0 || port > 60000)
 	{
-		logger_function(ERROR, "Invalid port number (try 1 - 60000)", "", 0);
+		logger_func(ERROR, "Invalid port number (try 1 - 60000)", "", 0);
 		exit(3);
 	}
     
@@ -323,9 +341,22 @@ int dwebserver(int port,
     
     if ((listenfd = socket(AF_INET, SOCK_STREAM,0)) < 0)
 	{
-		logger_function(ERROR, "system call", "socket", 0);
+		logger_func(ERROR, "system call", "socket", 0);
 		exit(3);
 	}
+    
+    // use SO_REUSEADDR, so we can restart the server without waiting
+    int y = 1;
+    if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &y, sizeof(y)) < 0)
+    {
+        logger_func(ERROR, "system call", "setsockopt", 0);
+		exit(3);
+    }
+    
+    // as soon as listenfd is set, keep a handler
+    // so we can close it on exit
+    signal(SIGINT, &inthandler);
+    signal(SIGTERM, &inthandler);
     
     serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -333,13 +364,13 @@ int dwebserver(int port,
     
 	if (bind(listenfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) <0)
 	{
-		logger_function(ERROR, "system call", "bind", 0);
+		logger_func(ERROR, "system call", "bind", 0);
 		exit(3);
 	}
     
 	if (listen(listenfd, 64) <0)
 	{
-		logger_function(ERROR, "system call", "listen", 0);
+		logger_func(ERROR, "system call", "listen", 0);
 		exit(3);
 	}
     
@@ -348,16 +379,30 @@ int dwebserver(int port,
 		length = sizeof(cli_addr);
 		if ((socketfd = accept(listenfd, (struct sockaddr*)&cli_addr, &length)) < 0)
 		{
-			logger_function(ERROR, "system call", "accept", 0);
+			logger_func(ERROR, "system call", "accept", 0);
 			exit(3);
 		}
         
-#ifdef SINGLE_THREADED
-        webhit(socketfd, hit, responder_func);
-#else
+        struct hitArgs *args = malloc(sizeof(struct hitArgs));
+        if (args==NULL)
+        {
+            logger_func(ERROR, "system call", "malloc", 0);
+			exit(3);
+        }
+        args->buffer = NULL;
+        args->form_values = NULL;
+        args->form_value_counter = 0;
+        args->logger_function = logger_func != NULL ? logger_func : &default_logger;
+        args->hit = hit;
+        args->socketfd = socketfd;
+        args->responder_function = responder_func;
+        
+#if MODE == SINGLE_THREADED
+        webhit(args);
+#elif MODE == MULTI_PROCESS
 		if ((pid = fork()) < 0)
 		{
-			logger_function(ERROR, "system call", "fork", 0);
+			logger_func(ERROR, "system call", "fork", 0);
 			exit(3);
 		}
 		else
@@ -366,20 +411,23 @@ int dwebserver(int port,
 			{
 				// child
 				close(listenfd);
-				webhit(socketfd, hit, responder_func); // never returns
+				webhit(args); // never returns
 			}
             else
             {
                 close(socketfd);
             }
 		}
+#elif MODE == MULTI_THREADED
+        pthread_t threadId;
+        if (pthread_create(&threadId, NULL, threadMain, args) !=0)
+        {
+            logger_func(ERROR, "system call", "pthread_create", 0);
+			exit(3);
+        }
 #endif
-
 	}
-    
-#ifdef SINGLE_THREADED
-    close(listenfd);
-#endif
+
 }
 
 // The same algorithm as found here:
@@ -411,21 +459,21 @@ void url_decode(char *s)
     strcpy(s, s_copy);
 }
 
-int form_value_count()
+int form_value_count(struct hitArgs *args)
 {
-    return form_value_counter;
+    return args->form_value_counter;
 }
 
-char* form_value(int i)
+char* form_value(struct hitArgs *args, int i)
 {
-    if (i>=form_value_counter) return NULL;
-    return form_values[i].value;
+    if (i>=args->form_value_counter) return NULL;
+    return args->form_values[i].value;
 }
 
-char* form_name(int i)
+char* form_name(struct hitArgs *args, int i)
 {
-    if (i>=form_value_counter) return NULL;
-    return form_values[i].name;
+    if (i>=args->form_value_counter) return NULL;
+    return args->form_values[i].name;
 }
 
 /* ---------- Memory allocation helpers ---------- */

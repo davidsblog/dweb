@@ -2,6 +2,10 @@
 
 #define _DWEBSVR_H
 
+#define SINGLE_THREADED 1
+#define MULTI_PROCESS 2
+#define MULTI_THREADED 3
+
 #define ERROR    42
 #define LOG      43
 
@@ -17,26 +21,6 @@ struct http_header
     char name[50];
     char value[255];
 };
-
-int dwebserver(int port,
-    void (*responder_func)(char*, char*, int, http_verb),
-    void (*logger_func)(log_type, char*, char*, int));
-
-struct http_header get_header(const char *name, char *request);
-
-void write_header(int socket_fd, char *head, long content_len);
-void write_html(int socket_fd, char *head, char *html);
-void forbidden_403(int socket_fd, char *info);
-void notfound_404(int socket_fd, char *info);
-void ok_200(int socket_fd, char *html, char *path);
-void logger(log_type type, char *s1, char *s2, int socket_fd);
-void webhit(int socketfd, int hit, void (*responder_func)(char*, char*, int, http_verb));
-
-int form_value_count();
-char* form_value(int i);
-char* form_name(int i);
-
-void url_decode(char *s);
 
 /* ---------- Memory allocation helper stuff ---------- */
 
@@ -63,5 +47,36 @@ typedef struct
     char *name, *value;
     char *data;
 } FORM_VALUE;
+
+struct hitArgs
+{
+    STRING *buffer;
+    FORM_VALUE *form_values;
+    int form_value_counter;
+    int socketfd;
+    int hit;
+    void (*responder_function)(struct hitArgs *args, char*, char*, http_verb);
+    void (*logger_function)(log_type, char*, char*, int);
+};
+
+int dwebserver(int port,
+    void (*responder_func)(struct hitArgs *args, char*, char*, http_verb),
+    void (*logger_func)(log_type, char*, char*, int));
+
+struct http_header get_header(const char *name, char *request);
+
+void write_header(int socket_fd, char *head, long content_len);
+void write_html(int socket_fd, char *head, char *html);
+void forbidden_403(struct hitArgs *args, char *info);
+void notfound_404(struct hitArgs *args, char *info);
+void ok_200(struct hitArgs *args, char *html, char *path);
+void logger(log_type type, char *s1, char *s2, int socket_fd);
+void webhit(struct hitArgs *args);
+
+int form_value_count(struct hitArgs *args);
+char* form_value(struct hitArgs *args,int i);
+char* form_name(struct hitArgs *args, int i);
+
+void url_decode(char *s);
 
 #endif

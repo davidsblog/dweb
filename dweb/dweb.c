@@ -27,10 +27,10 @@ struct {
 	{"js","text/javascript" },
 	{0,0} };
 
-void send_response(char*, char*, int, http_verb);
+void send_response(struct hitArgs *args, char*, char*, http_verb);
 void log_filter(log_type, char*, char*, int);
-void send_api_response(char*, char*, int);
-void send_file_response(char*, char*, int, int);
+void send_api_response(struct hitArgs *args, char*, char*);
+void send_file_response(struct hitArgs *args, char*, char*, int);
 
 int main(int argc, char **argv)
 {
@@ -50,60 +50,61 @@ void log_filter(log_type type, char *s1, char *s2, int socket_fd)
 }
 
 // decide if we need to send an API response or a file...
-void send_response(char *path, char *request_body, int socketfd, http_verb type)
+void send_response(struct hitArgs *args, char *path, char *request_body, http_verb type)
 {
     int path_length=(int)strlen(path);
     if (!strncmp(&path[path_length-3], "api", 3))
 	{
-		return send_api_response(path, request_body, socketfd);
+		return send_api_response(args, path, request_body);
 	}
     if (path_length==0)
 	{
-        return send_file_response("index.html", request_body, socketfd, 10);
+        return send_file_response(args, "index.html", request_body, 10);
 	}
-    send_file_response(path, request_body, socketfd, path_length);
+    send_file_response(args, path, request_body, path_length);
 }
 
 // a simple API, it receives a number, increments it and returns the response
-void send_api_response(char *path, char *request_body, int socketfd)
+void send_api_response(struct hitArgs *args, char *path, char *request_body)
 {
 	char response[4];
 	
-	if (form_value_count()==1 && !strncmp(form_name(0), "counter", strlen(form_name(0))))
+	if (form_value_count(args)==1 && !strncmp(form_name(args, 0), "counter", strlen(form_name(args, 0))))
 	{
-		int c = atoi(form_value(0));
+		int c = atoi(form_value(args, 0));
 		if (c>998) c=0;
 		sprintf(response, "%d", ++c);
-		return ok_200(socketfd, response, path);
+		return ok_200(args, response, path);
 	}
 	else
 	{
-		return forbidden_403(socketfd, "Bad request");
+		return forbidden_403(args, "Bad request");
 	}
 }
 
-void send_file_response(char *path, char *request_body, int socketfd, int path_length)
+void send_file_response(struct hitArgs *args, char *path, char *request_body, int path_length)
 {
 	int file_id, i;
 	long len;
 	char *content_type = NULL;
     STRING *response = new_string(FILE_CHUNK_SIZE);
 	
-	if (form_value_count() == 2)
+	if (form_value_count(args) > 0)
 	{
         string_add(response, "<html><head><title>Response Page</title></head>");
-        string_add(response, "<body><h1>Thanks...</h1>You entered:<br/>");
-        string_add(response, form_name(0));
-        string_add(response, " is ");
-        string_add(response, form_value(0));
-        string_add(response, "<br/>");
-        string_add(response, form_name(1));
-        string_add(response, " is ");
-        string_add(response, form_value(1));
-        string_add(response, "<br/>");
+        string_add(response, "<body><h1>Thanks...</h1>You sent these values<br/><br/>");
+        
+        int v;
+        for (v=0; v<form_value_count(args); v++)
+        {
+            string_add(response, form_name(args, v));
+            string_add(response, ": <b>");
+            string_add(response, form_value(args, v));
+            string_add(response, "</b><br/>");
+        }
+        
         string_add(response, "</body></html>");
-		
-		ok_200(socketfd, string_chars(response), path);
+		ok_200(args, string_chars(response), path);
         string_free(response);
         return;
 	}
@@ -121,13 +122,13 @@ void send_file_response(char *path, char *request_body, int socketfd, int path_l
 	if (content_type == NULL)
 	{
 		string_free(response);
-        return forbidden_403(socketfd, "file extension type not supported");
+        return forbidden_403(args, "file extension type not supported");
 	}
 	
 	if (file_id = open(path, O_RDONLY), file_id == -1)
 	{
 		string_free(response);
-        return notfound_404(socketfd, "failed to open file");
+        return notfound_404(args, "failed to open file");
 	}
 	
 	// open the file for reading
@@ -137,19 +138,19 @@ void send_file_response(char *path, char *request_body, int socketfd, int path_l
     if (len > BIGGEST_FILE)
     {
         string_free(response);
-        return forbidden_403(socketfd, "files this large are not supported");
+        return forbidden_403(args, "files this large are not supported");
     }
     
     string_add(response, "HTTP/1.1 200 OK\nServer: dweb\n");
     string_add(response, "Connection: close\n");
     string_add(response, "Content-Type: ");
     string_add(response, content_type);
-    write_header(socketfd, string_chars(response), len);
+    write_header(args->socketfd, string_chars(response), len);
     
 	// send file in blocks
 	while ((len = read(file_id, response->ptr, FILE_CHUNK_SIZE)) > 0)
 	{
-		write(socketfd, response->ptr, len);
+		write(args->socketfd, response->ptr, len);
 	}
     string_free(response);
     
