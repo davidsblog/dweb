@@ -1,7 +1,7 @@
 dweb
 ====
 
-A lightweight webserver for C programs, which should work on Linux, Unix, Mac OS, etc.  
+A lightweight webserver for C programs, *with no dependencies* which should work on Linux, Unix, Mac OS, etc.  
 I'm planning to use it as a very small Web API, most likely hosted on a Raspberry Pi.
 
 The idea is to be able to serve dynamic web content from simple C programs, without
