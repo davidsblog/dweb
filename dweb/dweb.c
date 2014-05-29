@@ -69,7 +69,7 @@ void send_api_response(struct hitArgs *args, char *path, char *request_body)
 {
 	char response[4];
 	
-	if (form_value_count(args)==1 && !strncmp(form_name(args, 0), "counter", strlen(form_name(args, 0))))
+	if (args->form_value_counter==1 && !strncmp(form_name(args, 0), "counter", strlen(form_name(args, 0))))
 	{
 		int c = atoi(form_value(args, 0));
 		if (c>998) c=0;
@@ -89,13 +89,13 @@ void send_file_response(struct hitArgs *args, char *path, char *request_body, in
 	char *content_type = NULL;
     STRING *response = new_string(FILE_CHUNK_SIZE);
 	
-	if (form_value_count(args) > 0)
+	if (args->form_value_counter > 0)
 	{
         string_add(response, "<html><head><title>Response Page</title></head>");
         string_add(response, "<body><h1>Thanks...</h1>You sent these values<br/><br/>");
         
         int v;
-        for (v=0; v<form_value_count(args); v++)
+        for (v=0; v<args->form_value_counter; v++)
         {
             string_add(response, form_name(args, v));
             string_add(response, ": <b>");

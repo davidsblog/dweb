@@ -73,7 +73,6 @@ void ok_200(struct hitArgs *args, char *html, char *path);
 void logger(log_type type, char *s1, char *s2, int socket_fd);
 void webhit(struct hitArgs *args);
 
-int form_value_count(struct hitArgs *args);
 char* form_value(struct hitArgs *args,int i);
 char* form_name(struct hitArgs *args, int i);
 

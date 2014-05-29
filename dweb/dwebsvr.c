@@ -291,6 +291,7 @@ void webhit(struct hitArgs *args)
 	args->responder_function(args, (type==HTTP_GET)
         ? string_chars(args->buffer)+5
         : string_chars(args->buffer)+6, body, type);
+    
     finish_hit(args, 1);
 }
 
@@ -457,11 +458,6 @@ void url_decode(char *s)
     }
     *ptr = 0;
     strcpy(s, s_copy);
-}
-
-int form_value_count(struct hitArgs *args)
-{
-    return args->form_value_counter;
 }
 
 char* form_value(struct hitArgs *args, int i)
