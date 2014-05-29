@@ -4,6 +4,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <pthread.h> // needed to run server on a new thread
+#include <termios.h> // needed for unbuffered_getch()
 
 #include "dwebsvr.h"
 
@@ -32,6 +34,27 @@ void log_filter(log_type, char*, char*, int);
 void send_api_response(struct hitArgs *args, char*, char*);
 void send_file_response(struct hitArgs *args, char*, char*, int);
 
+int unbuffered_getch(void)
+{
+    struct termios original_settings, unbuffered;
+    int c;
+    tcgetattr(STDIN_FILENO, &original_settings);
+    unbuffered = original_settings;
+    unbuffered.c_lflag &= ~(ECHO | ICANON);
+    tcsetattr(STDIN_FILENO, TCSANOW, &unbuffered);
+    c = getchar();
+    tcsetattr(STDIN_FILENO, TCSANOW, &original_settings);
+    return c;
+}
+
+void* server_thread(void *args)
+{
+    pthread_detach(pthread_self());
+    char *arg = (char*)args;
+    dwebserver(atoi(arg), &send_response, &log_filter);
+    return NULL;
+}
+
 int main(int argc, char **argv)
 {
     if (argc != 2 || !strcmp(argv[1], "-?"))
@@ -39,8 +62,19 @@ int main(int argc, char **argv)
 		printf("hint: dweb [port number]\n");
 		return 0;
 	}
-    puts("dweb server starting\nPress CTRL+C to quit");
-	dwebserver(atoi(argv[1]), &send_response, &log_filter);
+    
+    pthread_t server_thread_id;
+    if (pthread_create(&server_thread_id, NULL, server_thread, argv[1]) !=0)
+    {
+        puts("Error: pthread_create could not create server thread");
+        return 0;
+    }
+    
+    puts("dweb server started\nPress a key to quit");
+	unbuffered_getch();
+    dwebserver_kill();
+    pthread_cancel(server_thread_id);
+    puts("Bye bye");
 }
 
 void log_filter(log_type type, char *s1, char *s2, int socket_fd)

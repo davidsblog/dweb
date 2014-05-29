@@ -63,6 +63,8 @@ int dwebserver(int port,
     void (*responder_func)(struct hitArgs *args, char*, char*, http_verb),
     void (*logger_func)(log_type, char*, char*, int));
 
+void dwebserver_kill(void);
+
 struct http_header get_header(const char *name, char *request);
 
 void write_header(int socket_fd, char *head, long content_len);

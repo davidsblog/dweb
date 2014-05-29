@@ -307,10 +307,17 @@ void* threadMain(void *targs)
 
 void inthandler(int sig)
 {
-    puts("");
-    puts("webserver shutting down");
+    puts("\nwebserver shutting down");
     close(listenfd);
-    exit(0);
+    if (sig != SIGUSR1)
+    {
+        exit(0);
+    }
+}
+
+void dwebserver_kill(void)
+{
+    inthandler(SIGUSR1);
 }
 
 int dwebserver(int port,
@@ -343,7 +350,7 @@ int dwebserver(int port,
     if ((listenfd = socket(AF_INET, SOCK_STREAM,0)) < 0)
 	{
 		logger_func(ERROR, "system call", "socket", 0);
-		exit(3);
+		return 0;
 	}
     
     // use SO_REUSEADDR, so we can restart the server without waiting
@@ -351,7 +358,7 @@ int dwebserver(int port,
     if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &y, sizeof(y)) < 0)
     {
         logger_func(ERROR, "system call", "setsockopt", 0);
-		exit(3);
+		return 0;
     }
     
     // as soon as listenfd is set, keep a handler
@@ -366,13 +373,13 @@ int dwebserver(int port,
 	if (bind(listenfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) <0)
 	{
 		logger_func(ERROR, "system call", "bind", 0);
-		exit(3);
+		return 0;
 	}
     
 	if (listen(listenfd, 64) <0)
 	{
 		logger_func(ERROR, "system call", "listen", 0);
-		exit(3);
+		return 0;
 	}
     
 	for (hit=1; ; hit++)
@@ -381,14 +388,14 @@ int dwebserver(int port,
 		if ((socketfd = accept(listenfd, (struct sockaddr*)&cli_addr, &length)) < 0)
 		{
 			logger_func(ERROR, "system call", "accept", 0);
-			exit(3);
+			return 0;
 		}
         
         struct hitArgs *args = malloc(sizeof(struct hitArgs));
         if (args==NULL)
         {
             logger_func(ERROR, "system call", "malloc", 0);
-			exit(3);
+			return 0;
         }
         args->buffer = NULL;
         args->form_values = NULL;
@@ -404,7 +411,7 @@ int dwebserver(int port,
 		if ((pid = fork()) < 0)
 		{
 			logger_func(ERROR, "system call", "fork", 0);
-			exit(3);
+			return 0;
 		}
 		else
 		{
@@ -424,11 +431,10 @@ int dwebserver(int port,
         if (pthread_create(&threadId, NULL, threadMain, args) !=0)
         {
             logger_func(ERROR, "system call", "pthread_create", 0);
-			exit(3);
+			return 0;
         }
 #endif
 	}
-
 }
 
 // The same algorithm as found here:
