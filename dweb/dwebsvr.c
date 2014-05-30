@@ -22,6 +22,7 @@
 
 // a global place to store the listening socket descriptor
 int listenfd;
+volatile sig_atomic_t doing_shutdown = 0;
 
 // assumes a content type of "application/x-www-form-urlencoded" (the default type)
 void get_form_values(struct hitArgs *args, char *body)
@@ -307,6 +308,9 @@ void* threadMain(void *targs)
 
 void inthandler(int sig)
 {
+    if (doing_shutdown==1) return;
+    
+    doing_shutdown=1;
     puts("\nwebserver shutting down");
     close(listenfd);
     if (sig != SIGUSR1)
@@ -387,8 +391,11 @@ int dwebserver(int port,
 		length = sizeof(cli_addr);
 		if ((socketfd = accept(listenfd, (struct sockaddr*)&cli_addr, &length)) < 0)
 		{
-			logger_func(ERROR, "system call", "accept", 0);
-			return 0;
+			if (doing_shutdown==0)
+            {
+                logger_func(ERROR, "system call", "accept", 0);
+			}
+            return 0;
 		}
         
         struct hitArgs *args = malloc(sizeof(struct hitArgs));

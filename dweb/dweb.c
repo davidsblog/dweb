@@ -34,18 +34,8 @@ void log_filter(log_type, char*, char*, int);
 void send_api_response(struct hitArgs *args, char*, char*);
 void send_file_response(struct hitArgs *args, char*, char*, int);
 
-int unbuffered_getch(void)
-{
-    struct termios original_settings, unbuffered;
-    int c;
-    tcgetattr(STDIN_FILENO, &original_settings);
-    unbuffered = original_settings;
-    unbuffered.c_lflag &= ~(ECHO | ICANON);
-    tcsetattr(STDIN_FILENO, TCSANOW, &unbuffered);
-    c = getchar();
-    tcsetattr(STDIN_FILENO, TCSANOW, &original_settings);
-    return c;
-}
+struct termios original_settings;
+pthread_t server_thread_id;
 
 void* server_thread(void *args)
 {
@@ -53,6 +43,27 @@ void* server_thread(void *args)
     char *arg = (char*)args;
     dwebserver(atoi(arg), &send_response, &log_filter);
     return NULL;
+}
+
+void close_down()
+{
+    tcsetattr(STDIN_FILENO, TCSANOW, &original_settings);
+    dwebserver_kill();
+    pthread_cancel(server_thread_id);
+    puts("Bye bye");
+}
+
+void wait_for_key()
+{
+    struct termios unbuffered;
+    tcgetattr(STDIN_FILENO, &original_settings);
+    atexit(&close_down);
+    
+    unbuffered = original_settings;
+    unbuffered.c_lflag &= ~(ECHO | ICANON);
+    tcsetattr(STDIN_FILENO, TCSANOW, &unbuffered);
+    
+    getchar();
 }
 
 int main(int argc, char **argv)
@@ -63,7 +74,6 @@ int main(int argc, char **argv)
 		return 0;
 	}
     
-    pthread_t server_thread_id;
     if (pthread_create(&server_thread_id, NULL, server_thread, argv[1]) !=0)
     {
         puts("Error: pthread_create could not create server thread");
@@ -71,10 +81,7 @@ int main(int argc, char **argv)
     }
     
     puts("dweb server started\nPress a key to quit");
-	unbuffered_getch();
-    dwebserver_kill();
-    pthread_cancel(server_thread_id);
-    puts("Bye bye");
+    wait_for_key();
 }
 
 void log_filter(log_type type, char *s1, char *s2, int socket_fd)
