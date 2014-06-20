@@ -35,7 +35,7 @@ void get_form_values(struct hitArgs *args, char *body)
     
     while(token != NULL)
     {
-        tmp = malloc(strlen(token)+1);
+        tmp = malloc((int)strlen(token)+1);
         strcpy(tmp, token);
         url_decode(tmp);
         
@@ -50,7 +50,7 @@ void get_form_values(struct hitArgs *args, char *body)
             alloc = newsize;
         }
         
-        args->form_values[t].data = malloc(strlen(tmp)+1);
+        args->form_values[t].data = malloc((int)strlen(tmp)+1);
         strcpy(args->form_values[t].data, tmp);
         args->form_values[t].name = args->form_values[t].data;
         args->form_values[t].value = args->form_values[t].data+1+i;
@@ -78,6 +78,10 @@ void finish_hit(struct hitArgs *args, int exit_code)
     if (args->buffer)
     {
         string_free(args->buffer);
+    }
+    if (args->headers)
+    {
+        free(args->headers);
     }
     clear_form_values(args);
     free(args);
@@ -205,7 +209,7 @@ void webhit(struct hitArgs *args)
 {
 	int j;
 	http_verb type;
-	long i, body_size = 0, body_expected, request_size = 0, body_start;
+	long i, body_size = 0, body_expected, request_size = 0, body_start, headers_end;
     char tmp_buf[READ_BUF_LEN+1];
 	char *body;
     struct http_header content_length;
@@ -223,6 +227,12 @@ void webhit(struct hitArgs *args)
     content_length = get_header("Content-Length", string_chars(args->buffer));
     body_expected = atoi(content_length.value);
     body_start = get_body_start(string_chars(args->buffer));
+    headers_end = body_start-4;
+    
+    args->headers = malloc(headers_end+1);
+    strncpy(args->headers, string_chars(args->buffer), headers_end);
+    args->headers[headers_end]=0;
+    
     if (body_start>=0) body_size = request_size - body_start;
     
     // safari seems to send the headers, and then the body slightly later
@@ -406,6 +416,7 @@ int dwebserver(int port,
         }
         args->buffer = NULL;
         args->form_values = NULL;
+        args->headers = NULL;
         args->form_value_counter = 0;
         args->logger_function = logger_func != NULL ? logger_func : &default_logger;
         args->hit = hit;

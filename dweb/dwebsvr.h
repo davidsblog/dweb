@@ -51,6 +51,7 @@ typedef struct
 struct hitArgs
 {
     STRING *buffer;
+    char *headers;
     FORM_VALUE *form_values;
     int form_value_counter;
     int socketfd;

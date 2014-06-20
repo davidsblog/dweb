@@ -130,7 +130,9 @@ void send_file_response(struct hitArgs *args, char *path, char *request_body, in
 	char *content_type = NULL;
     STRING *response = new_string(FILE_CHUNK_SIZE);
 	
-	if (args->form_value_counter > 0)
+    struct http_header ctype = get_header("Content-Type", args->headers);
+    
+	if (args->form_value_counter > 0 && strncmp(ctype.value, "application/x-www-form-urlencoded", 33)==0)
 	{
         string_add(response, "<html><head><title>Response Page</title></head>");
         string_add(response, "<body><h1>Thanks...</h1>You sent these values<br/><br/>");
