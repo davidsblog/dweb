@@ -52,6 +52,8 @@ struct hitArgs
 {
     STRING *buffer;
     char *headers;
+    char *content_type;
+    int content_length;
     FORM_VALUE *form_values;
     int form_value_counter;
     int socketfd;
@@ -72,12 +74,13 @@ void write_header(int socket_fd, char *head, long content_len);
 void write_html(int socket_fd, char *head, char *html);
 void forbidden_403(struct hitArgs *args, char *info);
 void notfound_404(struct hitArgs *args, char *info);
-void ok_200(struct hitArgs *args, char *html, char *path);
+void ok_200(struct hitArgs *args, char *custom_headers, char *html, char *path);
 void logger(log_type type, char *s1, char *s2, int socket_fd);
 void webhit(struct hitArgs *args);
 
 char* form_value(struct hitArgs *args,int i);
 char* form_name(struct hitArgs *args, int i);
+int string_matches_value(char *str, const char *value);
 
 void url_decode(char *s);
 

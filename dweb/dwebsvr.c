@@ -10,6 +10,7 @@
 #include <string.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <sys/socket.h>
 #include <arpa/inet.h>
 #if MODE == MULTI_THREADED
     #include <pthread.h>
@@ -40,7 +41,9 @@ void get_form_values(struct hitArgs *args, char *body)
         url_decode(tmp);
         
 		for (i=0; i<strlen(tmp); i++)
+        {
 			if (tmp[i]=='=') break;
+        }
         
         if (alloc<=t)
         {
@@ -84,6 +87,10 @@ void finish_hit(struct hitArgs *args, int exit_code)
         free(args->headers);
     }
     clear_form_values(args);
+    if (args->content_type)
+    {
+        free(args->content_type);
+    }
     free(args);
     
 #if MODE == MULTI_PROCESS
@@ -93,7 +100,7 @@ void finish_hit(struct hitArgs *args, int exit_code)
 #endif
 }
 
-// writes the specified header and sets the Content-Length
+// writes the given headers and sets the Content-Length
 void write_header(int socket_fd, char *head, long content_len)
 {
     STRING *header = new_string(255);
@@ -103,14 +110,22 @@ void write_header(int socket_fd, char *head, long content_len)
     snprintf(cl, 10, "%ld", content_len);
     string_add(header, cl);
     string_add(header, "\r\n\r\n");
+#ifndef SO_NOSIGPIPE
+    send(socket_fd, string_chars(header), header->used_bytes-1, MSG_NOSIGNAL);
+#else
     write(socket_fd, string_chars(header), header->used_bytes-1);
+#endif
     string_free(header);
 }
 
 void write_html(int socket_fd, char *head, char *html)
 {
     write_header(socket_fd, head, strlen(html));
-	write(socket_fd, html, strlen(html));
+#ifndef SO_NOSIGPIPE
+    send(socket_fd, html, strlen(html), MSG_NOSIGNAL);
+#else
+    write(socket_fd, html, strlen(html));
+#endif
 }
 
 void forbidden_403(struct hitArgs *args, char *info)
@@ -133,11 +148,16 @@ void notfound_404(struct hitArgs *args, char *info)
 	args->logger_function(LOG, "404 NOT FOUND", info, args->socketfd);
 }
 
-void ok_200(struct hitArgs *args, char *html, char *path)
+void ok_200(struct hitArgs *args, char *custom_headers, char *html, char *path)
 {
-	write_html(args->socketfd,
-        "HTTP/1.1 200 OK\nServer: dweb\nCache-Control: no-cache\nPragma: no-cache\nContent-Type: text/html",
-        html);
+	STRING *headers = new_string(255);
+    string_add(headers, "HTTP/1.1 200 OK\nServer: dweb\nCache-Control: no-cache\nPragma: no-cache");
+    if (custom_headers != NULL)
+    {
+        string_add(headers, custom_headers);
+    }
+    write_html(args->socketfd, string_chars(headers), html);
+    string_free(headers);
 	
 	args->logger_function(LOG, "200 OK", path, args->socketfd);
 }
@@ -209,7 +229,7 @@ void webhit(struct hitArgs *args)
 {
 	int j;
 	http_verb type;
-	long i, body_size = 0, body_expected, request_size = 0, body_start, headers_end;
+	long i, body_size = 0, request_size = 0, body_start, headers_end;
     char tmp_buf[READ_BUF_LEN+1];
 	char *body;
     struct http_header content_length;
@@ -217,7 +237,7 @@ void webhit(struct hitArgs *args)
     
     // we need to read the HTTP headers first...
     // so loop until we receive "\r\n\r\n"
-    while (get_body_start(string_chars(args->buffer))<0)
+    while (get_body_start(string_chars(args->buffer)) < 0)
     {
         memset(tmp_buf, 0, READ_BUF_LEN+1);
         request_size += read(args->socketfd, tmp_buf, READ_BUF_LEN);
@@ -225,18 +245,21 @@ void webhit(struct hitArgs *args)
     }
     
     content_length = get_header("Content-Length", string_chars(args->buffer));
-    body_expected = atoi(content_length.value);
+    args->content_length = atoi(content_length.value);
     body_start = get_body_start(string_chars(args->buffer));
     headers_end = body_start-4;
     
-    args->headers = malloc(headers_end+1);
+    args->headers = malloc((int)headers_end+1);
     strncpy(args->headers, string_chars(args->buffer), headers_end);
     args->headers[headers_end]=0;
     
-    if (body_start>=0) body_size = request_size - body_start;
+    if (body_start >= 0)
+    {
+        body_size = request_size - body_start;
+    }
     
     // safari seems to send the headers, and then the body slightly later
-    while (body_size < body_expected)
+    while (body_size < args->content_length)
     {
         memset(tmp_buf, 0, READ_BUF_LEN+1);
         i = read(args->socketfd, tmp_buf, READ_BUF_LEN);
@@ -257,15 +280,6 @@ void webhit(struct hitArgs *args)
     
     args->logger_function(LOG, "request", string_chars(args->buffer), args->hit);
     
-	for (i=0; i<request_size; i++)
-	{
-		// replace CF and LF with asterisks
-		if(string_chars(args->buffer)[i] == '\r' || string_chars(args->buffer)[i] == '\n')
-		{
-			string_chars(args->buffer)[i]='*';
-		}
-	}
-	
 	if (type = request_type(string_chars(args->buffer)), type == HTTP_NOT_SUPPORTED)
 	{
 		forbidden_403(args, "Only simple GET and POST operations are supported");
@@ -273,7 +287,7 @@ void webhit(struct hitArgs *args)
 	}
 	
 	// get a pointer to the request body (or NULL if it's not there)
-	body = strstr(string_chars(args->buffer), "****") + 4;
+    body = (type==HTTP_GET) ? NULL : args->buffer->ptr+get_body_start(string_chars(args->buffer));
 	
 	// the request will be "GET URL " or "POST URL " followed by other details
 	// we will terminate after the second space, to ignore everything else
@@ -288,29 +302,35 @@ void webhit(struct hitArgs *args)
 
 	for (j=0; j<i-1; j++)
 	{
-		// check for parent directory use
+		// check for parent directory
 		if (string_chars(args->buffer)[j] == '.' && string_chars(args->buffer)[j+1] == '.')
 		{
-			forbidden_403(args, "Parent paths (..) are not supported");
+			forbidden_403(args, "Sorry, parent paths (..) are not permitted");
             finish_hit(args, 3);
 		}
 	}
     
-    get_form_values(args, body);
-	
-	// call the "responder function" which has been provided to do the rest
-	args->responder_function(args, (type==HTTP_GET)
-        ? string_chars(args->buffer)+5
-        : string_chars(args->buffer)+6, body, type);
+    struct http_header ctype = get_header("Content-Type", args->headers);
+    j = (int)strlen(ctype.value);
+    args->content_type = malloc(j+1);
+    strncpy(args->content_type, ctype.value, j);
+
+    if (string_matches_value(args->content_type, "application/x-www-form-urlencoded"))
+    {
+        get_form_values(args, body);
+	}
     
+	// call the "responder function" which has been provided to do the rest
+    args->responder_function(args, string_chars(args->buffer) + ((type==HTTP_GET) ? 5 : 6), body, type);
     finish_hit(args, 1);
 }
 
 #if MODE == MULTI_THREADED
 void* threadMain(void *targs)
 {
+	struct hitArgs *args = (struct hitArgs*)targs;
     pthread_detach(pthread_self());
-    struct hitArgs *args = (struct hitArgs*)targs;
+    
     webhit(args);
     return NULL;
 }
@@ -335,8 +355,8 @@ void dwebserver_kill(void)
 }
 
 int dwebserver(int port,
-    void (*responder_func)(struct hitArgs *args, char*, char*, http_verb),  // pointer to responder func
-    void (*logger_func)(log_type, char*, char*, int) )     // pointer to logger (or NULL)
+    void (*responder_func)(struct hitArgs *args, char*, char*, http_verb), // pointer to responder func
+    void (*logger_func)(log_type, char*, char*, int) ) // pointer to logger (or NULL)
 {
 #if MODE == MULTI_PROCESS
     int pid;
@@ -353,13 +373,14 @@ int dwebserver(int port,
 		exit(3);
 	}
     
-     // ignore child death and terminal hangups
+    // ignore child process deaths
 #ifndef SIGCLD
 	signal(SIGCHLD, SIG_IGN);
 #else
 	signal(SIGCLD, SIG_IGN);
 #endif
-    signal(SIGHUP, SIG_IGN);
+    signal(SIGHUP, SIG_IGN);  // ignore terminal hangups
+    signal(SIGPIPE, SIG_IGN); // ignore broken pipes
     
     if ((listenfd = socket(AF_INET, SOCK_STREAM,0)) < 0)
 	{
@@ -367,8 +388,21 @@ int dwebserver(int port,
 		return 0;
 	}
     
-    // use SO_REUSEADDR, so we can restart the server without waiting
+    // But to support Linux, I've also used MSG_NOSIGNAL:
+    // http://stackoverflow.com/questions/108183/how-to-prevent-sigpipes-or-handle-them-properly/450130#450130
+    
     int y = 1;
+#ifdef SO_NOSIGPIPE
+    // use SO_NOSIGPIPE, to ignore any SIGPIPEs
+    if (setsockopt(listenfd, SOL_SOCKET, SO_NOSIGPIPE, &y, sizeof(y)) < 0)
+    {
+        logger_func(ERROR, "system call", "setsockopt", 0);
+		return 0;
+    }
+    y=1;
+#endif
+
+    // use SO_REUSEADDR, so we can restart the server without waiting
     if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &y, sizeof(y)) < 0)
     {
         logger_func(ERROR, "system call", "setsockopt", 0);
@@ -405,7 +439,7 @@ int dwebserver(int port,
             {
                 logger_func(ERROR, "system call", "accept", 0);
 			}
-            return 0;
+            continue;
 		}
         
         struct hitArgs *args = malloc(sizeof(struct hitArgs));
@@ -417,6 +451,7 @@ int dwebserver(int port,
         args->buffer = NULL;
         args->form_values = NULL;
         args->headers = NULL;
+        args->content_type = NULL;
         args->form_value_counter = 0;
         args->logger_function = logger_func != NULL ? logger_func : &default_logger;
         args->hit = hit;
@@ -449,7 +484,7 @@ int dwebserver(int port,
         if (pthread_create(&threadId, NULL, threadMain, args) !=0)
         {
             logger_func(ERROR, "system call", "pthread_create", 0);
-			return 0;
+			continue;
         }
 #endif
 	}
@@ -494,6 +529,11 @@ char* form_name(struct hitArgs *args, int i)
 {
     if (i>=args->form_value_counter) return NULL;
     return args->form_values[i].name;
+}
+
+int string_matches_value(char *str, const char *value)
+{
+    return strncmp(str, value, strlen(value))==0;
 }
 
 /* ---------- Memory allocation helpers ---------- */

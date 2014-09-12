@@ -21,7 +21,7 @@ int main(int argc, char **argv)
 
 void simple_response(struct hitArgs *args, char *path, char *request_body, http_verb type)
 {
-	ok_200(args,
+	ok_200(args, "\nContent-Type: text/html",
 		"<html><head><title>Test Page</title></head>"
 		"<body><h1>Testing...</h1>This is a test response.</body>"
 		"</html>", path);

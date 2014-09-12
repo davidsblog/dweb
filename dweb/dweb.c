@@ -57,13 +57,13 @@ void wait_for_key()
 {
     struct termios unbuffered;
     tcgetattr(STDIN_FILENO, &original_settings);
-    atexit(&close_down);
     
     unbuffered = original_settings;
     unbuffered.c_lflag &= ~(ECHO | ICANON);
     tcsetattr(STDIN_FILENO, TCSANOW, &unbuffered);
     
     getchar();
+    close_down();
 }
 
 int main(int argc, char **argv)
@@ -115,7 +115,7 @@ void send_api_response(struct hitArgs *args, char *path, char *request_body)
 		int c = atoi(form_value(args, 0));
 		if (c>998) c=0;
 		sprintf(response, "%d", ++c);
-		return ok_200(args, response, path);
+		return ok_200(args, "\nContent-Type: text/plain", response, path);
 	}
 	else
 	{
@@ -130,9 +130,8 @@ void send_file_response(struct hitArgs *args, char *path, char *request_body, in
 	char *content_type = NULL;
     STRING *response = new_string(FILE_CHUNK_SIZE);
 	
-    struct http_header ctype = get_header("Content-Type", args->headers);
-    
-	if (args->form_value_counter > 0 && strncmp(ctype.value, "application/x-www-form-urlencoded", 33)==0)
+	if (args->form_value_counter > 0 &&
+        string_matches_value(args->content_type, "application/x-www-form-urlencoded"))
 	{
         string_add(response, "<html><head><title>Response Page</title></head>");
         string_add(response, "<body><h1>Thanks...</h1>You sent these values<br/><br/>");
@@ -147,7 +146,7 @@ void send_file_response(struct hitArgs *args, char *path, char *request_body, in
         }
         
         string_add(response, "</body></html>");
-		ok_200(args, string_chars(response), path);
+		ok_200(args, "\nContent-Type: text/html", string_chars(response), path);
         string_free(response);
         return;
 	}
