@@ -27,6 +27,7 @@ struct {
 	{"htm", "text/html" },  
 	{"html","text/html" },  
 	{"js","text/javascript" },
+    {"txt","text/plain" },
 	{0,0} };
 
 void send_response(struct hitArgs *args, char*, char*, http_verb);
@@ -195,6 +196,7 @@ void send_file_response(struct hitArgs *args, char *path, char *request_body, in
 		write(args->socketfd, response->ptr, len);
 	}
     string_free(response);
+    close(file_id);
     
     // allow socket to drain before closing
 	sleep(1);

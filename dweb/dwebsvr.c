@@ -28,8 +28,9 @@ volatile sig_atomic_t doing_shutdown = 0;
 // assumes a content type of "application/x-www-form-urlencoded" (the default type)
 void get_form_values(struct hitArgs *args, char *body)
 {
+    char *saveptr;
     int t=0, i, alloc = FORM_VALUE_BLOCK;
-	char *tmp, *token = strtok(body, "&");
+	char *tmp, *token = strtok_r(body, "&", &saveptr);
     
     args->form_values = malloc(alloc * sizeof(FORM_VALUE));
     memset(args->form_values, 0, alloc * sizeof(FORM_VALUE));
@@ -58,8 +59,7 @@ void get_form_values(struct hitArgs *args, char *body)
         args->form_values[t].name = args->form_values[t].data;
         args->form_values[t].value = args->form_values[t].data+1+i;
 		args->form_values[t++].data[i] = 0;
-        
-		token = strtok(NULL, "&");
+		token = strtok_r(NULL, "&", &saveptr);
         free (tmp);
     }
     args->form_value_counter = t;
@@ -242,6 +242,13 @@ void webhit(struct hitArgs *args)
         memset(tmp_buf, 0, READ_BUF_LEN+1);
         request_size += read(args->socketfd, tmp_buf, READ_BUF_LEN);
         string_add(args->buffer, tmp_buf);
+        if (tmp_buf[0]==0) break;
+    }
+    
+    // ignore empty any requests
+    if (request_size == 0)
+    {
+        finish_hit(args, 3);
     }
     
     content_length = get_header("Content-Length", string_chars(args->buffer));
@@ -289,11 +296,11 @@ void webhit(struct hitArgs *args)
 	// get a pointer to the request body (or NULL if it's not there)
     body = (type==HTTP_GET) ? NULL : args->buffer->ptr+get_body_start(string_chars(args->buffer));
 	
-	// the request will be "GET URL " or "POST URL " followed by other details
+	// the request will be "GET [URL] " or "POST [URL] " followed by other details
 	// we will terminate after the second space, to ignore everything else
 	for (i = (type==HTTP_GET) ? 4 : 5; i < args->buffer->used_bytes; i++)
 	{
-		if(string_chars(args->buffer)[i] == ' ')
+		if (string_chars(args->buffer)[i] == ' ')
 		{
 			string_chars(args->buffer)[i] = 0; // second space, terminate string here
 			break;
