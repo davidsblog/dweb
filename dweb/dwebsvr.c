@@ -245,7 +245,6 @@ void webhit(struct hitArgs *args)
         if (tmp_buf[0]==0) break;
     }
     
-    // ignore empty any requests
     if (request_size == 0)
     {
         finish_hit(args, 3);
@@ -256,9 +255,17 @@ void webhit(struct hitArgs *args)
     body_start = get_body_start(string_chars(args->buffer));
     headers_end = body_start-4;
     
-    args->headers = malloc((int)headers_end+1);
-    strncpy(args->headers, string_chars(args->buffer), headers_end);
-    args->headers[headers_end]=0;
+    if (headers_end > 0)
+    {
+        args->headers = malloc((int)headers_end+1);
+        strncpy(args->headers, string_chars(args->buffer), headers_end);
+        args->headers[headers_end]=0;
+    }
+    else
+    {
+        args->headers = malloc(1);
+        args->headers[0] = 0;
+    }
     
     if (body_start >= 0)
     {
@@ -319,13 +326,21 @@ void webhit(struct hitArgs *args)
     
     struct http_header ctype = get_header("Content-Type", args->headers);
     j = (int)strlen(ctype.value);
-    args->content_type = malloc(j+1);
-    strncpy(args->content_type, ctype.value, j);
-
-    if (string_matches_value(args->content_type, "application/x-www-form-urlencoded"))
+    if (j > 0)
     {
-        get_form_values(args, body);
-	}
+        args->content_type = malloc(j+1);
+        strncpy(args->content_type, ctype.value, j);
+        
+        if (string_matches_value(args->content_type, "application/x-www-form-urlencoded"))
+        {
+            get_form_values(args, body);
+        }
+    }
+    else
+    {
+        args->content_type = malloc(1);
+        args->content_type[0] = 0;
+    }
     
 	// call the "responder function" which has been provided to do the rest
     args->responder_function(args, string_chars(args->buffer) + ((type==HTTP_GET) ? 5 : 6), body, type);
@@ -540,6 +555,7 @@ char* form_name(struct hitArgs *args, int i)
 
 int string_matches_value(char *str, const char *value)
 {
+    if (str==NULL || value==NULL) return 0;
     return strncmp(str, value, strlen(value))==0;
 }
 
