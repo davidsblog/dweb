@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <sys/time.h> // for struct timeval
 #if MODE == MULTI_THREADED
     #include <pthread.h>
 #endif
