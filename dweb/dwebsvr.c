@@ -418,7 +418,7 @@ int dwebserver(int port,
     // use SO_NOSIGPIPE, to ignore any SIGPIPEs
     if (setsockopt(listenfd, SOL_SOCKET, SO_NOSIGPIPE, &y, sizeof(y)) < 0)
     {
-        logger_func(ERROR, "system call", "setsockopt", 0);
+        logger_func(ERROR, "system call", "setsockopt -> SO_NOSIGPIPE", 0);
 		return 0;
     }
     y=1;
@@ -427,8 +427,18 @@ int dwebserver(int port,
     // use SO_REUSEADDR, so we can restart the server without waiting
     if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &y, sizeof(y)) < 0)
     {
-        logger_func(ERROR, "system call", "setsockopt", 0);
+        logger_func(ERROR, "system call", "setsockopt -> SO_REUSEADDR", 0);
 		return 0;
+    }
+    
+    // set a 60 second timeout, to avoid waiting forever...
+    struct timeval timeout;
+    timeout.tv_sec = 60;
+    timeout.tv_usec = 0;
+    if (setsockopt(listenfd, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(struct timeval)) < 0)
+    {
+        logger_func(ERROR, "system call", "setsockopt -> SO_RCVTIMEO", 0);
+        return 0;
     }
     
     // as soon as listenfd is set, keep a handler
@@ -457,7 +467,7 @@ int dwebserver(int port,
 		length = sizeof(cli_addr);
 		if ((socketfd = accept(listenfd, (struct sockaddr*)&cli_addr, &length)) < 0)
 		{
-			if (doing_shutdown==0)
+			if (doing_shutdown==0 && logger_func != NULL)
             {
                 logger_func(ERROR, "system call", "accept", 0);
 			}
@@ -467,7 +477,10 @@ int dwebserver(int port,
         struct hitArgs *args = malloc(sizeof(struct hitArgs));
         if (args==NULL)
         {
-            logger_func(ERROR, "system call", "malloc", 0);
+            if (logger_func!=NULL)
+            {
+                logger_func(ERROR, "system call", "malloc", 0);
+            }
 			return 0;
         }
         args->buffer = NULL;
@@ -505,7 +518,10 @@ int dwebserver(int port,
         pthread_t threadId;
         if (pthread_create(&threadId, NULL, threadMain, args) !=0)
         {
-            logger_func(ERROR, "system call", "pthread_create", 0);
+            if (logger_func != NULL)
+            {
+                logger_func(ERROR, "system call", "pthread_create", 0);
+            }
 			continue;
         }
 #endif
