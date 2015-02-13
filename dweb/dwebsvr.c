@@ -215,7 +215,7 @@ http_verb request_type(char *request)
 	{
 		return HTTP_GET;
 	}
-	if (strncmp(request, "POST ", 4)==0 || strncmp(request, "post ", 4)==0)
+	if (strncmp(request, "POST ", 5)==0 || strncmp(request, "post ", 5)==0)
 	{
 		return HTTP_POST;
 	}
@@ -249,6 +249,7 @@ void webhit(struct hitArgs *args)
     if (request_size == 0)
     {
         finish_hit(args, 3);
+        return;
     }
     
     content_length = get_header("Content-Length", string_chars(args->buffer));
@@ -291,6 +292,7 @@ void webhit(struct hitArgs *args)
 		// cannot read request, so we'll stop
 		forbidden_403(args, "failed to read http request");
         finish_hit(args, 3);
+        return;
 	}
     
     args->logger_function(LOG, "request", string_chars(args->buffer), args->hit);
@@ -299,6 +301,7 @@ void webhit(struct hitArgs *args)
 	{
 		forbidden_403(args, "Only simple GET and POST operations are supported");
         finish_hit(args, 3);
+        return;
 	}
 	
 	// get a pointer to the request body (or NULL if it's not there)
@@ -322,6 +325,7 @@ void webhit(struct hitArgs *args)
 		{
 			forbidden_403(args, "Sorry, parent paths (..) are not permitted");
             finish_hit(args, 3);
+	        return;
 		}
 	}
     
