@@ -390,9 +390,8 @@ int dwebserver(int port,
 #endif
     int socketfd, hit;
 	socklen_t length;
-    // *static* means the compiler will make them initialised to zeros
-	static struct sockaddr_in cli_addr;
-	static struct sockaddr_in serv_addr;
+    // get the compiler to initialise to zeros (C99 Standard 6.7.8.21)
+    struct sockaddr_in cli_addr = {}, serv_addr = {};
     
 	if (port <= 0 || port > 60000)
 	{
