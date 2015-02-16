@@ -435,16 +435,6 @@ int dwebserver(int port,
 		return 0;
     }
     
-    // set a 60 second timeout, to avoid waiting forever...
-    struct timeval timeout;
-    timeout.tv_sec = 60;
-    timeout.tv_usec = 0;
-    if (setsockopt(listenfd, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(struct timeval)) < 0)
-    {
-        logger_func(ERROR, "system call", "setsockopt -> SO_RCVTIMEO", 0);
-        return 0;
-    }
-    
     // as soon as listenfd is set, keep a handler
     // so we can close it on exit
     signal(SIGINT, &inthandler);
@@ -466,6 +456,11 @@ int dwebserver(int port,
 		return 0;
 	}
     
+    // use a 60 second timeout on individual sockets
+    struct timeval timeout;
+    timeout.tv_sec = 60;
+    timeout.tv_usec = 0;
+    
 	for (hit=1; ; hit++)
 	{
 		length = sizeof(cli_addr);
@@ -477,6 +472,11 @@ int dwebserver(int port,
 			}
             continue;
 		}
+        // apply the timeout to this socket
+        if (setsockopt(socketfd, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(struct timeval)) < 0)
+        {
+            logger_func(ERROR, "system call", "setsockopt -> SO_RCVTIMEO", 0);
+        }
         
         struct hitArgs *args = malloc(sizeof(struct hitArgs));
         if (args==NULL)
