@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>dweb and bootstrap 3</title>
+        <link rel="stylesheet" href="css/bootstrap.min.css" />
+        <link rel="stylesheet" href="css/bootstrap-theme.min.css" />
+    </head>
+    
+    <body>
+        <nav class="navbar navbar-inverse navbar-fixed-top">
+            <div class="container">
+                <div class="navbar-header">
+                    <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
+                        <span class="sr-only">Toggle navigation</span>
+                        <span class="icon-bar"></span>
+                        <span class="icon-bar"></span>
+                        <span class="icon-bar"></span>
+                    </button>
+                    <a class="navbar-brand" href="#">
+                        <span class="glyphicon glyphicon-cog" aria-hidden="true"></span>
+                        &nbsp;dweb server
+                    </a>
+                </div>
+                <div id="navbar" class="navbar-collapse collapse">
+                    
+                    <form class="navbar-form navbar-right" name="myinput" method="post">
+                        <div class="form-group">
+                            <input name="firstname" type="text" placeholder="Firstname" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <input name="lastname" type="text" placeholder="Surname" class="form-control">
+                        </div>
+                        <button type="submit" class="btn btn-success">Test</button>
+                        
+                    </form>
+                </div><!--/.navbar-collapse -->
+            </div>
+        </nav>
+        
+        <div class="jumbotron">
+            <div class="container">
+                <h1>Whoa! It really works!</h1>
+                <p><strong>dweb</strong> is a <em>lightweight</em> webserver for C programs, with no dependencies which should work on Linux, Unix, Mac OS, etc. It implements just enough of the HTTP protocol to work with the main browsers. But if you're looking for a fully featured webserver, then dweb is <em>not</em> what you want...</p>
+            </div>
+        </div>
+        
+        <div class="container">
+            <div class="row">
+                <div class="col-md-4">
+                    <h2>But ... why?</h2>
+                    <p>Mainly because I wanted a small webserver, and I wanted to know how all the code worked inside. I'm planning to use it as a very small Web API, most likely hosted on a Raspberry Pi or a cheap router running OpenWrt, probably both :-).</p>
+                </div>
+                <div class="col-md-4">
+                    <h2>History</h2>
+                    <p>I owe a lot to <a href="http://www.ibm.com/developerworks/systems/library/es-nweb/index.html">nweb</a> which was my starting point. But I am allowing extra things like HTTP POSTs and serving dynamic content. Unlike nweb, this code does not run as a daemon, and logging goes to the console by default, although you can override the logging function and do something else if you like.</p>
+                </div>
+                <div class="col-md-4">
+                    <h2>License</h2>
+                    <p>dweb is released under the MIT License.</p>
+                    <p>The source code is on <a href="http://github.com/davidsblog/dweb">GitHub</a>.</p>
+                    <p class="text-muted">&copy; 2015 <a href="http://www.codehosting.net">David's Blog</a></p>
+                </div>
+            </div>
+            
+            <hr>
+            
+            <footer class="footer">
+                <div class="container">
+                    <label class="text-muted">Ajax Counter:</label>
+                    <span class="well well-sm" id='counter'>1</span>
+                </div>
+            </footer>
+            
+        </div> <!-- /container -->
+        
+        <!-- Bootstrap core JavaScript
+         ================================================== -->
+        <!-- Placed at the end of the document so the pages load faster -->
+        <script src="js/jquery-2-1-0-min.js"></script>
+        <script src="js/bootstrap.min.js"></script>
+        <!-- IE10 viewport hack for Surface/desktop Windows 8 bug -->
+        <script src="js/ie10-viewport-bug-workaround.js"></script>
+        
+        <script src="code.js"></script>
+    </body>
+</html>
