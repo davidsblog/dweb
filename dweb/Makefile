@@ -3,9 +3,13 @@ CC=gcc
 dwebmake: dweb.c dwebsvr.c
 	$(CC) -o dweb dweb.c dwebsvr.c -pthread -std=gnu99
 
-openwrt: dweb.c dwebsvr.c
+vocore: dweb.c dwebsvr.c
 	export STAGING_DIR=$$PWD; \
 `find /home -name mipsel-openwrt-linux-gcc -print -quit -print 2>/dev/null` -o dweb -Os -s dweb.c dwebsvr.c -pthread
+
+wr740n: dweb.c dwebsvr.c
+	export STAGING_DIR=$$PWD; \
+`find /home -name mips-openwrt-linux-uclibc-gcc -print -quit -print 2>/dev/null` -o dweb -Os -s dweb.c dwebsvr.c -pthread
 
 simple: simple.c dwebsvr.c
 	$(CC) -o simple simple.c dwebsvr.c -pthread -std=gnu99
