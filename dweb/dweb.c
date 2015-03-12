@@ -27,14 +27,15 @@ struct {
 	{"htm", "text/html" },  
 	{"html","text/html" },  
 	{"js","text/javascript" },
-    {"txt","text/plain" },
-    {"css","text/css" },
-    {"map","application/json" },
-    {"woff","application/font-woff" },
-    {"woff2","application/font-woff2" },
-    {"ttf","application/font-sfnt" },
-    {"svg","image/svg+xml" },
-    {"eot","application/vnd.ms-fontobject" },
+	{"txt","text/plain" },
+	{"css","text/css" },
+	{"map","application/json" },
+	{"woff","application/font-woff" },
+	{"woff2","application/font-woff2" },
+	{"ttf","application/font-sfnt" },
+	{"svg","image/svg+xml" },
+	{"eot","application/vnd.ms-fontobject" },
+	{"mp4","video/mp4" },
 	{0,0} };
 
 void send_response(struct hitArgs *args, char*, char*, http_verb);
