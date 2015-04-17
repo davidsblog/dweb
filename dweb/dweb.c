@@ -35,6 +35,7 @@ struct {
     {"ttf","application/font-sfnt" },
     {"svg","image/svg+xml" },
     {"eot","application/vnd.ms-fontobject" },
+    {"mp4","video/mp4" },
 	{0,0} };
 
 void send_response(struct hitArgs *args, char*, char*, http_verb);
@@ -76,20 +77,27 @@ void wait_for_key()
 
 int main(int argc, char **argv)
 {
-    if (argc != 2 || !strcmp(argv[1], "-?"))
+    if (argc < 2 || !strncmp(argv[1], "-h", 2))
 	{
 		printf("hint: dweb [port number]\n");
 		return 0;
 	}
-    
-    if (pthread_create(&server_thread_id, NULL, server_thread, argv[1]) !=0)
+    if (argc > 2 && !strncmp(argv[2], "-d", 2))
     {
-        puts("Error: pthread_create could not create server thread");
-        return 0;
+        // don't read from the console or log anything
+        dwebserver(atoi(argv[1]), &send_response, NULL);
     }
+    else
+    {
+        if (pthread_create(&server_thread_id, NULL, server_thread, argv[1]) !=0)
+        {
+            puts("Error: pthread_create could not create server thread");
+            return 0;
+        }
     
-    puts("dweb server started\nPress a key to quit");
-    wait_for_key();
+        puts("dweb server started\nPress a key to quit");
+        wait_for_key();
+    }
 }
 
 void log_filter(log_type type, char *s1, char *s2, int socket_fd)
@@ -200,7 +208,7 @@ void send_file_response(struct hitArgs *args, char *path, char *request_body, in
 	// send file in blocks
 	while ((len = read(file_id, response->ptr, FILE_CHUNK_SIZE)) > 0)
 	{
-		write(args->socketfd, response->ptr, len);
+		if (write(args->socketfd, response->ptr, len) <=0) break;
 	}
     string_free(response);
     close(file_id);
