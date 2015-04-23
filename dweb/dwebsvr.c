@@ -290,6 +290,9 @@ void webhit(struct hitArgs *args)
         {
             request_size += i;
             string_add(args->buffer, tmp_buf);
+        } else if (i <= 0) 
+        {
+            return;
         }
         body_size = request_size - body_start;
     }
