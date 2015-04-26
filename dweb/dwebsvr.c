@@ -290,8 +290,13 @@ void webhit(struct hitArgs *args)
         {
             request_size += i;
             string_add(args->buffer, tmp_buf);
+            body_size = request_size - body_start;
         }
-        body_size = request_size - body_start;
+        else
+        {
+            // stop looping if we cannot read any more bytes
+            break;
+        }
     }
     
     if (request_size <= 0)
