@@ -325,9 +325,19 @@ void webhit(struct hitArgs *args)
 		}
 	}
 
-	for (j=0; j<i-1; j++)
+    j = (type==HTTP_GET) ? 4 : 5;
+    
+    // check for an absolute directory
+    if (string_chars(args->buffer)[j] == '/' && string_chars(args->buffer)[j+1] == '/')
+    {
+        forbidden_403(args, "Sorry, absolute paths (//) are not permitted");
+        finish_hit(args, 3);
+        return;
+    }
+    
+	for (; j<i-1; j++)
 	{
-		// check for parent directory
+		// check for any parent directory use
 		if (string_chars(args->buffer)[j] == '.' && string_chars(args->buffer)[j+1] == '.')
 		{
 			forbidden_403(args, "Sorry, parent paths (..) are not permitted");
