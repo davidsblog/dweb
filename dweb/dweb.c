@@ -145,7 +145,7 @@ void send_file_response(struct hitArgs *args, char *path, char *request_body, in
 	long len;
 	char *content_type = NULL;
     STRING *response = new_string(FILE_CHUNK_SIZE);
-	
+
 	if (args->form_value_counter > 0 &&
         string_matches_value(args->content_type, "application/x-www-form-urlencoded"))
 	{
@@ -189,6 +189,10 @@ void send_file_response(struct hitArgs *args, char *path, char *request_body, in
         return notfound_404(args, "failed to open file");
 	}
 	
+    if (path[0] == '/') {
+        string_free(response);
+        return forbidden_403(args, "No absolute file paths allowed.");
+    }
 	// open the file for reading
 	len = (long)lseek(file_id, (off_t)0, SEEK_END); // lseek to the file end to find the length
 	lseek(file_id, (off_t)0, SEEK_SET); // lseek back to the file start
