@@ -333,9 +333,9 @@ void webhit(struct hitArgs *args)
     j = (type==HTTP_GET) ? 4 : 5;
     
     // check for an absolute directory
-    if (string_chars(args->buffer)[j] == '/' && string_chars(args->buffer)[j+1] == '/')
+    if (string_chars(args->buffer)[j+1] == '/')
     {
-        forbidden_403(args, "Sorry, absolute paths (//) are not permitted");
+        forbidden_403(args, "Sorry, absolute paths are not permitted");
         finish_hit(args, 3);
         return;
     }
