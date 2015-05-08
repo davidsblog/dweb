@@ -13,5 +13,8 @@ function count_with_ajax()
 	}).done(function(data)
 	{
 		$("#counter").text(data);
+        $("#progbar").attr("aria-valuenow",data);
+        $("#progbar").width(data+"%");
+        $("#progbar").text(data);
 	});
 }
