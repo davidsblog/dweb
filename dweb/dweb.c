@@ -129,7 +129,7 @@ void send_api_response(struct hitArgs *args, char *path, char *request_body)
 	if (args->form_value_counter==1 && !strncmp(form_name(args, 0), "counter", strlen(form_name(args, 0))))
 	{
 		int c = atoi(form_value(args, 0));
-		if (c>998 || c<0) c=0;
+		if (c>99 || c<0) c=0;
 		sprintf(response, "%d", ++c);
 		return ok_200(args, "\nContent-Type: text/plain", response, path);
 	}
