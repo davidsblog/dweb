@@ -39,12 +39,16 @@ To build the example program, which uses jQuery, allows HTML Form values to be p
 
 Alternatively, to just build the *trivial* example (as shown above) you can type ```make simple``` and then run ```simple``` from the command line.
 
+Request Size
+========
+The maximum bytes read from the incoming request is set using the ```#define``` parameter ```MAX_INCOMING_REQUEST``` and this value *includes* the HTTP headers.  The default is **4096** bytes.  If you need to have requests bigger than this you will need to increase that value.
+
 License
 =======
 
 The MIT License (MIT)
 
-Copyright (c) 2014 David's Blog - www.codehosting.net
+Copyright (c) 2014-15 David's Blog - www.codehosting.net
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
