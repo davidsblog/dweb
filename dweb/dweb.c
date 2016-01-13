@@ -1,3 +1,9 @@
+/****************************************************************************
+ ** Released under The MIT License (MIT). This code comes without warranty, **
+ ** but if you use it you must provide attribution back to David's Blog     **
+ ** at http://www.codehosting.net   See the LICENSE file for more details.  **
+ ****************************************************************************/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
