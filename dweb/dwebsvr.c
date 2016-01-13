@@ -188,11 +188,12 @@ void default_logger(log_type type, char *title, char *description, int socket_fd
 	fflush(stdout);
 }
 
-struct http_header get_header(const char *name, char *request)
+struct http_header get_header(const char *name, char *request, int max_len)
 {
     struct http_header retval;
     int x=0;
     char *ptr = strstr(request, name);
+    char *end = ptr + max_len;
     strncpy(retval.name, name, sizeof(retval.name)-1);
     retval.name[sizeof(retval.name)-1] = 0;
     
@@ -202,9 +203,9 @@ struct http_header get_header(const char *name, char *request)
         return retval;
     }
     
-    while (*ptr++!=':') ;
-    while (isblank(*++ptr)) ;
-    while (x<sizeof(retval.value)-1 && *ptr!='\r' && *ptr!='\n')
+    while (*ptr++!=':' && ptr <= end) ;
+    while (isblank(*++ptr) && ptr <= end) ;
+    while (x<sizeof(retval.value)-1 && *ptr!='\r' && *ptr!='\n' && ptr <= end)
     {
         retval.value[x++] = *ptr++;
     }
@@ -264,7 +265,7 @@ void webhit(struct hitArgs *args)
         return;
     }
     
-    content_length = get_header("Content-Length", string_chars(args->buffer));
+    content_length = get_header("Content-Length", string_chars(args->buffer), args->buffer->used_bytes);
     args->content_length = atoi(content_length.value);
     body_start = get_body_start(string_chars(args->buffer));
     headers_end = body_start-4;
@@ -357,7 +358,7 @@ void webhit(struct hitArgs *args)
 		}
 	}
     
-    struct http_header ctype = get_header("Content-Type", args->headers);
+    struct http_header ctype = get_header("Content-Type", args->headers, strlen(args->headers));
     j = (int)strlen(ctype.value);
     if (j > 0)
     {
