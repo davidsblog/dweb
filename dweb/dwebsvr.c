@@ -58,7 +58,10 @@ void get_form_values(struct hitArgs *args, char *body)
 			if (tmp[i]=='=') break;
         }
         
-        if (alloc<=t)
+        // don't allow i to be set to strlen(tmp) - to prevent reading other memory
+        if (i>0 && i==strlen(tmp)) i--;
+        
+        if (alloc <= t)
         {
             int newsize = alloc+FORM_VALUE_BLOCK;
             args->form_values = reallocx(args->form_values, newsize * sizeof(FORM_VALUE));
@@ -358,7 +361,7 @@ void webhit(struct hitArgs *args)
 		}
 	}
     
-    struct http_header ctype = get_header("Content-Type", args->headers, strlen(args->headers));
+    struct http_header ctype = get_header("Content-Type", args->headers, (int)strlen(args->headers));
     j = (int)strlen(ctype.value);
     if (j > 0)
     {
