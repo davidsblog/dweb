@@ -58,22 +58,23 @@ void get_form_values(struct hitArgs *args, char *body)
 			if (tmp[i]=='=') break;
         }
         
-        // don't allow i to be set to strlen(tmp) - to prevent reading other memory
-        if (i>0 && i==strlen(tmp)) i--;
-        
-        if (alloc <= t)
+        if (i<strlen(tmp))
         {
-            int newsize = alloc+FORM_VALUE_BLOCK;
-            args->form_values = reallocx(args->form_values, newsize * sizeof(FORM_VALUE));
-            memset(args->form_values+alloc, 0, FORM_VALUE_BLOCK * sizeof(FORM_VALUE));
-            alloc = newsize;
+            if (alloc <= t)
+            {
+                int newsize = alloc+FORM_VALUE_BLOCK;
+                args->form_values = reallocx(args->form_values, newsize * sizeof(FORM_VALUE));
+                memset(args->form_values+alloc, 0, FORM_VALUE_BLOCK * sizeof(FORM_VALUE));
+                alloc = newsize;
+            }
+        
+            args->form_values[t].data = mallocx((int)strlen(tmp)+1);
+            strcpy(args->form_values[t].data, tmp);
+            args->form_values[t].name = args->form_values[t].data;
+            args->form_values[t].value = args->form_values[t].data+1+i;
+            args->form_values[t++].data[i] = 0;
         }
         
-        args->form_values[t].data = mallocx((int)strlen(tmp)+1);
-        strcpy(args->form_values[t].data, tmp);
-        args->form_values[t].name = args->form_values[t].data;
-        args->form_values[t].value = args->form_values[t].data+1+i;
-		args->form_values[t++].data[i] = 0;
 		token = strtok_r(NULL, "&", &saveptr);
         free (tmp);
     }
