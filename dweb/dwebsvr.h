@@ -97,5 +97,6 @@ char* form_name(struct hitArgs *args, int i);
 int string_matches_value(char *str, const char *value);
 
 void url_decode(char *s);
+char decode_char(char c);
 
 #endif

@@ -565,25 +565,31 @@ void url_decode(char *s)
     char s_copy[len+1];
     char *ptr = s_copy;
     memset(s_copy, 0, sizeof(s_copy));
-
+    
     for (i=0; i < len; i++)
     {
         if (s[i]=='+')
         {
             *ptr++ = ' ';
         }
-        else if ( (s[i] != '%') || (!isdigit(s[i+1]) || !isdigit(s[i+2])) )
+        else if ( (s[i] != '%') || (!isxdigit(s[i+1]) || !isxdigit(s[i+2])) )
         {
             *ptr++ = s[i];
         }
-		else
-		{
-			*ptr++ = ((s[i+1] - '0') << 4) | (s[i+2] - '0');
-			i += 2;
-		}
+        else
+        {
+            *ptr++ = ((decode_char(s[i+1]) << 4) | decode_char(s[i+2]));
+            i += 2;
+        }
     }
     *ptr = 0;
     strcpy(s, s_copy);
+}
+
+char decode_char(char c)
+{
+    c = tolower(c);
+    return c <= '9' ? c - '0' : c - 'a' + 10;
 }
 
 char* form_value(struct hitArgs *args, int i)
