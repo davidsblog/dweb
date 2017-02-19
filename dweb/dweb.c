@@ -23,13 +23,13 @@ struct {
 	char *filetype;
 } extensions [] = {
 	{"gif", "image/gif" },  
-	{"jpg", "image/jpg" }, 
+	{"jpg", "image/jpeg" },
 	{"jpeg","image/jpeg"},
 	{"png", "image/png" },  
-	{"ico", "image/ico" },  
-	{"zip", "image/zip" },  
-	{"gz",  "image/gz"  },  
-	{"tar", "image/tar" },  
+	{"ico", "image/x-icon" },
+	{"zip", "application/zip" },
+	{"gz",  "application/gzip"  },
+	{"tar", "application/x-tar" },
 	{"htm", "text/html" },  
 	{"html","text/html" },  
 	{"js","text/javascript" },
